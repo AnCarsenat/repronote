@@ -5,6 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pronote</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%235b5bd6'/%3E%3Cpath d='M4 4h8M4 8h8M4 12h5' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+  <script>
+    // Appearance before the first paint (no flash); web/settings.js does the rest.
+    try {
+      const s = JSON.parse(localStorage.getItem("repronote:settings") || "{}") || {};
+      const r = document.documentElement;
+      if (s.theme === "light" || s.theme === "dark") r.dataset.theme = s.theme;
+      if (s.textSize === "small" || s.textSize === "large") r.dataset.text = s.textSize;
+      if (s.density === "compact") r.dataset.density = "compact";
+      if (s.reduceMotion) r.dataset.motion = "reduce";
+      const t = s.accent && JSON.parse(localStorage.getItem("repronote:accent-tokens") || "null");
+      if (t) {
+        r.dataset.accent = "custom";
+        for (const k in t) r.style.setProperty(k, t[k]);
+      }
+    } catch {}
+  </script>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -19,7 +35,7 @@
   <div id="banner" class="banner" hidden></div>
   <main id="view" class="view"></main>
   <footer class="footer muted small">
-    <a href="/api/export">Exporter toutes mes données (JSON)</a>
+    <a href="/api/export">Exporter toutes mes données (JSON)</a> · <a href="#/settings">Réglages</a>
   </footer>
   <script type="module" src="/app.js"></script>
 </body>
