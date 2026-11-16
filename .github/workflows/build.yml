@@ -156,9 +156,8 @@ jobs:
             sleep 5
             adb exec-out screencap -p > screen.png
             node scripts/android-login-test.mjs
-            sleep 20
             adb exec-out screencap -p > login.png
-            sleep 20
+            for i in $(seq 1 45); do adb logcat -d -s repronote-node:* | grep -q "\[sync\]" && break; sleep 2; done
             adb exec-out screencap -p > login2.png
             adb logcat -d -s repronote-node:* repronote:* chromium:* > logcat.txt || true
             grep -v glBindAttrib logcat.txt | tail -80

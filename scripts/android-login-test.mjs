@@ -19,3 +19,17 @@ ws.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression
 await new Promise((r) => setTimeout(r, 1000));
 ws.close();
 console.log("login requested");
+
+// The demo site pre-fills its credentials: submit them, so the whole flow
+// (session takeover, sync) runs. The log should then show "[sync] … ok".
+await new Promise((r) => setTimeout(r, 15000));
+const login = (await (await fetch("http://127.0.0.1:9222/json/list")).json()).find((t) => t.url.includes("demo.index-education.net"));
+if (login) {
+  const lw = new WebSocket(login.webSocketDebuggerUrl);
+  await new Promise((r, j) => ((lw.onopen = r), (lw.onerror = j)));
+  const click = `(() => { const b = [...document.querySelectorAll("button, [role=button], input[type=submit]")].find((e) => /se connecter/i.test(e.textContent || e.value || "")); if (b) b.click(); return !!b; })()`;
+  const reply = new Promise((r) => (lw.onmessage = (m) => r(JSON.parse(m.data))));
+  lw.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression: click, returnByValue: true } }));
+  console.log("clicked:", JSON.stringify((await reply).result?.result?.value));
+  lw.close();
+} else console.log("login page not found");
