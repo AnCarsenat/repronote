@@ -42,6 +42,7 @@ Allez sur la **[page de la dernière version](https://github.com/AnCarsenat/repr
 | 🪟 **Windows** | `…-win-x64.exe` | Lancez-le. Si Windows affiche « Windows a protégé votre ordinateur », cliquez **Informations complémentaires** puis **Exécuter quand même** (l'application n'est pas encore signée). |
 | 🐧 **Linux** (Ubuntu, Mint, Debian…) | `…-linux-amd64.deb` | Double-cliquez dessus pour l'installer. |
 | 🐧 **Linux** (autre) | `…-linux-x86_64.AppImage` | Clic droit → Propriétés → « Autoriser l'exécution », puis double-clic. |
+| 🐧 **Linux**, en une commande | — | Dans un terminal : `curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh \| bash` |
 
 Ensuite :
 
@@ -66,6 +67,7 @@ C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT
 | Fichier | Pour |
 |---|---|
 | `repronote-…-win-x64.exe` | Windows (installateur) |
+| `install-linux.sh` | Linux, toutes distributions : installe la dernière AppImage dans `/usr/local/bin` avec une entrée dans le menu des applications |
 | `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (pas besoin de `fuse2`/`libfuse2`) |
 | `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
 | `repronote-…-linux-x64.tar.gz` | Linux sans AppImage : extraire puis lancer `./repronote` |

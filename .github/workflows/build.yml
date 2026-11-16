@@ -178,11 +178,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: install-linux.sh
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/*
+            install-linux.sh
           generate_release_notes: true
