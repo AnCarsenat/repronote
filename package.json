@@ -61,7 +61,8 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "tar.gz"
       ],
       "category": "Education",
       "maintainer": "AnCarsenat",
@@ -78,6 +79,9 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false
     },
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "toolsets": {
+      "appimage": "1.0.3"
+    }
   }
 }
