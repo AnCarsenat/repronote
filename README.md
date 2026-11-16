@@ -17,8 +17,10 @@
 - **Tout sur un seul écran d'accueil** : prochain cours, devoirs, dernières notes, évaluations… Vous choisissez les widgets et leur place.
 - **Emploi du temps lisible**, avec les heures de trou, les cours annulés et les évaluations. Touchez un cours pour voir la salle et le professeur.
 - **Devoirs à cocher**, dans une liste qui défile jusqu'à la fin de l'année, et un graphique de la charge de travail.
-- **Vraie moyenne générale** : coefficients des matières, bonus, préréglages bac et brevet, simulateurs d'examen.
+- **Vraie moyenne générale** : coefficients des matières, bonus, préréglages bac et brevet.
+- **Calculateurs** : bac, brevet… et « où gagner des points » : quelle matière ferait le plus monter votre moyenne générale.
 - **Statistiques** : évolution de la moyenne, matière par matière.
+- **Notifications** : nouvelle note, nouveau devoir, information, cours annulé — sur l'ordinateur, le téléphone, ou dans un salon **Discord** (webhooks).
 - **Tout le reste de Pronote** : informations (à marquer comme lues), carnet (absences, retards, punitions), contenus de cours, documents et bulletins, annuaire des professeurs.
 - **Hors ligne** : tout est gardé sur votre appareil, vous pouvez consulter sans réseau.
 - **Thème sombre**, onglets à masquer, taille du texte… dans les Réglages.
@@ -42,7 +44,7 @@ Allez sur la **[page de la dernière version](https://github.com/AnCarsenat/repr
 | 🪟 **Windows** | `…-win-x64.exe` | Lancez-le. Si Windows affiche « Windows a protégé votre ordinateur », cliquez **Informations complémentaires** puis **Exécuter quand même** (l'application n'est pas encore signée). |
 | 🐧 **Linux** (Ubuntu, Mint, Debian…) | `…-linux-amd64.deb` | Double-cliquez dessus pour l'installer. |
 | 🐧 **Linux** (autre) | `…-linux-x86_64.AppImage` | Clic droit → Propriétés → « Autoriser l'exécution », puis double-clic. |
-| 🐧 **Linux**, en une commande | — | Dans un terminal : `curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh \| bash` |
+| 🐧 **Linux**, en une commande | — | Dans un terminal : `curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh \| bash`. Il vous demande : l'application, ou le serveur (à utiliser dans votre navigateur). |
 
 Ensuite :
 
@@ -67,7 +69,7 @@ C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT
 | Fichier | Pour |
 |---|---|
 | `repronote-…-win-x64.exe` | Windows (installateur) |
-| `install-linux.sh` | Linux, toutes distributions : installe la dernière AppImage dans `/usr/local/bin` avec une entrée dans le menu des applications |
+| `install-linux.sh` | Linux : installe la dernière version avec une entrée dans le menu des applications — l'application (`--app`) ou le serveur (`--server`, voir plus bas) |
 | `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (pas besoin de `fuse2`/`libfuse2`) |
 | `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
 | `repronote-…-linux-x64.tar.gz` | Linux sans AppImage : extraire puis lancer `./repronote` |
@@ -75,6 +77,34 @@ C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT
 | `repronote-…-android-armeabi-v7a.apk` | Anciens téléphones Android 32 bits |
 | `repronote-…-android-x86_64.apk` | Émulateurs Android, Chromebooks x86 |
 | `repronote-server-….zip` | Le serveur seul (Node ≥ 24 + Chromium), pour un serveur ou un Raspberry Pi |
+
+## Le serveur seul sur Linux
+
+Si vous préférez utiliser repronote dans votre navigateur habituel :
+
+```sh
+curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh | bash -s -- --server
+```
+
+Il faut **Node.js ≥ 24** et **Chromium** (ou Chrome) pour la connexion à l'ENT. Le script installe le serveur dans `/opt/repronote-server`, la commande `repronote-server` et une entrée « repronote (serveur) » dans le menu : elle démarre le serveur s'il ne tourne pas, puis ouvre http://localhost:4173. Les données vont dans `~/.local/share/repronote`.
+
+- `--autostart` : démarre le serveur avec votre session (service systemd utilisateur), pour que notifications et webhooks marchent même navigateur fermé.
+- `repronote-server --stop` arrête le serveur, `repronote-server --foreground` le lance dans le terminal.
+- `bash install-linux.sh --uninstall` désinstalle (vos données restent).
+- Sans sudo, pour vous seul : `PREFIX=~/.local OPT_DIR=~/.local/opt bash install-linux.sh --server`.
+
+## Notifications et webhooks
+
+Dans **Réglages → Notifications** : choisissez quoi suivre (notes, devoirs, informations, cours annulés) et où.
+
+- **Sur l'appareil** : notifications du système dans l'application de bureau et sur Android ; avec le serveur seul, notifications du navigateur tant qu'un onglet repronote est ouvert.
+- **Webhooks** : collez l'adresse d'un webhook **Discord** (Paramètres du salon → Intégrations → Webhooks) ou de n'importe quel service qui accepte du JSON. Format JSON envoyé :
+  ```json
+  { "source": "repronote", "events": [{ "id": "grade:…", "kind": "grade", "title": "Nouvelle note en MATHEMATIQUES", "body": "15,5/20 · Contrôle · moyenne de la classe 11,2", "at": 1794864901950 }] }
+  ```
+  `kind` vaut `grade`, `homework`, `news` ou `canceled`.
+
+Les nouveautés sont détectées à chaque synchronisation (toutes les 30 minutes tant que repronote tourne). Sur Android, seulement tant que l'application n'a pas été fermée par le système.
 
 ## Depuis les sources
 
@@ -143,6 +173,8 @@ Le serveur local expose une API JSON. `GET /api` en donne la liste.
 | POST | `/api/news/read` | Marquer une information comme lue / non lue dans Pronote — `{ "key": "...", "read": true }` |
 | GET | `/api/contacts` | Annuaire : professeurs (matières) et personnels (fonction) joignables par la messagerie. `/api/contacts.csv` pour un tableur |
 | POST | `/api/contacts/emails` | Cherche l'adresse e-mail de chacun de ces professeurs/personnels avec l'autocomplétion du webmail de l'ENT (une fenêtre s'ouvre pour s'y connecter ; une recherche par personne, rien d'autre n'est lu) |
+| PUT | `/api/notifications` | Quoi notifier et où — `{ "kinds": { "grade": true, … }, "system": true, "webhooks": [{ "url", "format": "discord" \| "json", "name" }] }` |
+| POST | `/api/notifications/test` | Envoie une notification de test partout |
 | GET | `/api/export` | Toutes les données en un fichier JSON |
 
 Exemple :
