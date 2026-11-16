@@ -916,3 +916,6 @@ p.set-hint { margin: 0; }
 .welcome-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .welcome-form .search { max-width: none; flex: 1 1 280px; }
 .error-text { color: var(--bad); margin: 0; }
+.contacts-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.contact-email { overflow-wrap: anywhere; }
+@media (max-width: 760px) { .contacts th:nth-child(2), .contacts td:nth-child(2) { display: none; } }

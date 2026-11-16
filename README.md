@@ -66,7 +66,7 @@ Quelques données que pawnote ne sait pas (ou plus) lire sont récupérées dire
 |---|---|
 | Documents, bulletins | requête Pronote `Casier` (onglet 103), PDF via `GenerationPDF` |
 | Informations | liste via `PageActualites` ; textes récupérés par la page Pronote elle-même au moment de la connexion ; « lu » via `SaisieActualites` (`genreSaisie: 0`) |
-| Annuaire | requête `ListeRessourcesPourCommunication` (Pronote ne donne pas les e-mails) |
+| Annuaire | requête `ListeRessourcesPourCommunication` ; e-mails via l'autocomplétion du webmail ENT (`psn.monlycee.net/address-book/contacts?filter=`), une recherche par personne de l'annuaire |
 | Devoirs | archive locale de tous les devoirs de l'année (les identifiants Pronote changent à chaque session : clé stable matière + date + texte) |
 | Fichiers | téléchargés via le serveur local et gardés dans `data/files` (les liens Pronote expirent avec la session) |
 
@@ -92,6 +92,7 @@ Le serveur local expose une API JSON. `GET /api` en donne la liste.
 | GET | `/api/homework/range?from=AAAA-MM-JJ&to=AAAA-MM-JJ` | Devoirs sur une période (120 jours max), en direct ou depuis l'archive locale |
 | POST | `/api/news/read` | Marquer une information comme lue / non lue dans Pronote — `{ "key": "...", "read": true }` |
 | GET | `/api/contacts` | Annuaire : professeurs (matières) et personnels (fonction) joignables par la messagerie. `/api/contacts.csv` pour un tableur |
+| POST | `/api/contacts/emails` | Cherche l'adresse e-mail de chacun de ces professeurs/personnels avec l'autocomplétion du webmail de l'ENT (une fenêtre s'ouvre pour s'y connecter ; une recherche par personne, rien d'autre n'est lu) |
 | GET | `/api/export` | Toutes les données en un fichier JSON |
 
 Exemple :
