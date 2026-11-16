@@ -286,7 +286,7 @@ export function hBarChart(rows, { series = [{ name: "" }], max, format = (v) => 
       const hit = s("rect", { x: 0, y: y0 - 2, width: W, height: rowH, class: "hit" });
       hit.addEventListener("pointerenter", () => {
         tooltip.replaceChildren(h("strong", {}, r.label),
-          series.map((se, j) => h("div", { class: "tip-row" }, h("span", { class: `swatch s${j + 1}` }), `${se.name ? `${se.name} : ` : ""}${format(r.values[j])}`)));
+          ...series.map((se, j) => h("div", { class: "tip-row" }, h("span", { class: `swatch s${j + 1}` }), `${se.name ? `${se.name} : ` : ""}${format(r.values[j])}`)));
         tooltip.hidden = false;
         tooltip.style.left = "60%";
         tooltip.style.top = `${y0 + rowH}px`;
