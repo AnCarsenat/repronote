@@ -122,7 +122,15 @@ function settingsPanel(w, rerender) {
 
   return h("div", { class: "widget-settings" },
     type.settings?.length ? type.settings.map(field) : null,
-    visibleCols() > 1
+    h("label", { class: "field", for: `${w.id}-size` }, h("span", {}, "Largeur"),
+      h("select", { id: `${w.id}-size`, onchange: (e) => update((list) => (list.find((x) => x.id === w.id).size = e.target.value)) },
+        h("option", { value: "normal", selected: w.size !== "wide" }, "Une colonne"),
+        h("option", { value: "wide", selected: w.size === "wide" }, "Toute la largeur"))),
+    h("label", { class: "field", for: `${w.id}-height` }, h("span", {}, "Hauteur"),
+      h("select", { id: `${w.id}-height`, onchange: (e) => update((list) => (list.find((x) => x.id === w.id).maxHeight = Number(e.target.value) || null)) },
+        [["", "Automatique"], ["260", "Petite (défilement)"], ["420", "Moyenne (défilement)"], ["620", "Grande (défilement)"]].map(([v, label]) =>
+          h("option", { value: v, selected: String(w.maxHeight ?? "") === v }, label)))),
+    w.size !== "wide" && visibleCols() > 1
       ? h("label", { class: "field", for: `${w.id}-col` }, h("span", {}, "Colonne"),
           h("select", { id: `${w.id}-col`, onchange: (e) => update((list) => (list.find((x) => x.id === w.id).col = Number(e.target.value))) },
             ["Gauche", "Milieu", "Droite"].slice(0, visibleCols()).map((label, c) =>
@@ -154,6 +162,8 @@ function dropAt(col, targetId, before) {
   update((list) => {
     const [item] = list.splice(list.findIndex((x) => x.id === moving), 1);
     item.col = col;
+    const target = targetId && list.find((x) => x.id === targetId);
+    item.size = target?.size === "wide" ? "wide" : targetId ? "normal" : "normal";
     if (targetId) {
       let to = list.findIndex((x) => x.id === targetId);
       if (!before) to += 1;
@@ -179,7 +189,7 @@ function widgetCard(w, rerender) {
   const oldest = Math.min(...type.needs.map((k) => store.state?.data?.[k]?.fetchedAt ?? Infinity));
   const open = openSettings.has(w.id);
 
-  const el = h("section", { class: `card widget ${open ? "settings-open" : ""} ${highlightId === w.id ? "flash" : ""}`, id: `w-${w.id}` },
+  const el = h("section", { class: `card widget ${w.size === "wide" ? "full" : ""} ${open ? "settings-open" : ""} ${highlightId === w.id ? "flash" : ""}`, id: `w-${w.id}` },
     h("div", { class: "widget-head" },
       h("button", { type: "button", class: "icon-btn grip", title: "Glisser pour déplacer", "aria-label": `Déplacer ${type.title}` }, svgIcon(GRIP, 3.2)),
       h("h2", {}, type.title),
@@ -190,7 +200,10 @@ function widgetCard(w, rerender) {
       }, svgIcon(GEAR)),
     ),
     open ? settingsPanel(w, rerender) : null,
-    body,
+    h("div", {
+      class: `widget-body ${w.maxHeight ? "scroll" : ""}`,
+      style: w.maxHeight ? { "max-height": `${w.maxHeight}px` } : undefined,
+    }, body),
     Number.isFinite(oldest) && Date.now() - oldest > 60 * 60_000 ? h("p", { class: "stale" }, `Données ${formatAgo(oldest)}`) : null,
   );
 
@@ -233,9 +246,11 @@ export default {
     const { widgets } = layout();
     const n = visibleCols();
 
+    // Full-width widgets go in a band above the columns, in their order.
+    const wide = widgets.filter((w) => w.size === "wide");
     const columns = Array.from({ length: n }, (_, c) => {
       // Columns beyond what fits are appended to the last visible one.
-      const mine = widgets.filter((w) => Math.min(w.col, n - 1) === c);
+      const mine = widgets.filter((w) => w.size !== "wide" && Math.min(w.col, n - 1) === c);
       const col = h("div", { class: "home-col" },
         mine.map((w) => widgetCard(w, rerender)),
         h("button", { type: "button", class: "add-here", onclick: () => openGallery(c) }, "+ Ajouter ici"),
@@ -263,6 +278,7 @@ export default {
         h("button", { type: "button", class: "small-btn", onclick: () => openGallery() }, "+ Ajouter un widget"),
         h("span", { class: "muted small" }, "Glissez ⋮⋮ pour déplacer · ⚙ pour régler"),
       ),
+      wide.length ? h("div", { class: "home-wide" }, wide.map((w) => widgetCard(w, rerender))) : null,
       widgets.length ? h("div", { class: "home-cols", style: { "--cols": String(n) } }, columns) : emptyState("Aucun widget. Ajoutez-en un !"),
     ];
   },

@@ -1,14 +1,16 @@
 // Pieces reused by several views and widgets.
 import { h, subjectName, htmlToText, formatTime, formatDay, classTitle, subjectColor, looksLikeTest, sameDay, homeworkList } from "./lib.js";
-import { setHomeworkDone, data as currentData } from "./state.js";
+import { setHomeworkDone, data as currentData, store } from "./state.js";
 
 /**
  * Link to a Pronote file through the local server, which renews the link
  * with the live session and keeps a copy for offline use. Web links (kind 0)
  * open directly.
  */
-export function fileLink(f, label = `📎 ${f.name}`) {
-  if (f.kind === 0) return h("a", { href: f.url, target: "_blank", rel: "noreferrer" }, `🔗 ${f.name}`);
+const decodeEntities = (t) => new DOMParser().parseFromString(String(t ?? ""), "text/html").documentElement.textContent;
+
+export function fileLink(f, label = `📎 ${decodeEntities(f.name)}`) {
+  if (f.kind === 0) return h("a", { href: f.url, target: "_blank", rel: "noreferrer" }, `🔗 ${decodeEntities(f.name)}`);
   const href = `/api/file?id=${encodeURIComponent(f.id)}&n=${encodeURIComponent(f.name)}&u=${encodeURIComponent(f.url ?? "")}`;
   return h("a", { href, target: "_blank", rel: "noreferrer" }, label);
 }
@@ -157,4 +159,11 @@ export function openClassDetails(c) {
       ? h("section", { class: "detail-section" }, h("h3", {}, "Devoirs donnés pendant ce cours"), h("ul", { class: "list" }, givenThatDay.map((a) => homeworkItem(a, { showDate: true }))))
       : null,
   ]);
+}
+
+/** "Open in Pronote" button: the student space on the school's Pronote (ENT login there). */
+export function pronoteButton(label = "Ouvrir dans Pronote ↗", cls = "secondary small-btn") {
+  const base = store.state?.pronoteURL;
+  if (!base) return null;
+  return h("a", { class: `button ${cls}`, href: `${base}/eleve.html`, target: "_blank", rel: "noreferrer" }, label);
 }

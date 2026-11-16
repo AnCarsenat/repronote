@@ -9,8 +9,9 @@ import notebook from "./views/notebook.js";
 import news from "./views/news.js";
 import documents from "./views/documents.js";
 import account from "./views/account.js";
+import stats from "./views/stats.js";
 
-const views = [home, timetable, homework, grades, resources, notebook, news, documents, account];
+const views = [home, timetable, homework, grades, stats, resources, notebook, news, documents, account];
 const $ = (id) => document.getElementById(id);
 
 const currentView = () => views.find((v) => location.hash === `#/${v.id}`) ?? home;
@@ -34,6 +35,7 @@ function renderHeader() {
     h("span", { class: `dot ${s?.lastSync?.ok === false || store.serverDown ? "bad" : "ok"}` }),
     h("span", { class: "muted small" }, `Synchro ${formatAgo(s?.lastSuccessfulSync)}${s?.pending ? ` · ${s.pending} action(s) en attente` : ""}`),
     syncBtn,
+    s?.pronoteURL ? h("a", { class: "button secondary small-btn", href: `${s.pronoteURL}/eleve.html`, target: "_blank", rel: "noreferrer", title: "Ouvrir Pronote dans le navigateur" }, "Pronote ↗") : null,
   );
 }
 

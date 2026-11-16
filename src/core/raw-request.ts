@@ -38,6 +38,9 @@ export async function rawRequest(
 
     const body = JSON.parse(await res.text());
     if (body.Erreur) throw new Error(`${name}: ${body.Erreur.Titre ?? JSON.stringify(body.Erreur)}`);
+    // Pronote also reports refused requests here, with an empty answer.
+    const sig = body.dataSec?.Signature;
+    if (sig?.Erreur) throw new Error(`${name}: refused by Pronote${sig.MessageErreur ? ` (${sig.MessageErreur})` : ""}`);
     return body.dataSec?.data ?? body.dataSec;
   });
 }

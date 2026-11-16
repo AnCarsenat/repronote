@@ -3,8 +3,9 @@
 Une interface alternative pour **Pronote**, qui tourne sur votre ordinateur.
 
 - Fonctionne **hors ligne** : tout est gardé localement (SQLite) et synchronisé en arrière-plan.
-- **Accueil modulaire** : widgets à ajouter, régler, déplacer entre colonnes — et facile d'écrire les siens.
-- **Tout Pronote** : emploi du temps (avec les trous, détails des cours), devoirs à cocher, notes avec moyennes calculées (coefficients, bonus, préréglages bac/brevet), contenus de cours, carnet (absences, retards, punitions), informations, documents (casier, tous les bulletins), mes données.
+- **Accueil modulaire** : widgets à ajouter, régler (largeur, hauteur avec défilement), déplacer entre colonnes — et facile d'écrire les siens.
+- **Tout Pronote** : emploi du temps (avec les trous, détails des cours), devoirs à cocher (liste sans fin jusqu'à la fin de l'année), notes avec moyennes calculées (coefficients, bonus, préréglages bac/brevet), statistiques (évolution de la moyenne, matières, charge de travail), contenus de cours, carnet (absences, retards, punitions), informations (marquer comme lu, recherche), documents (casier, tous les bulletins), annuaire de l'établissement exportable, mes données.
+- Boutons **« Ouvrir dans Pronote »** pour ce qui doit se faire sur le site (sondages, certificats…).
 - **Connexion par l'ENT** dans un vrai navigateur : ni mot de passe ni jeton enregistrés.
 - **API HTTP locale** pour brancher vos propres outils.
 
@@ -48,7 +49,9 @@ Quelques données que pawnote ne sait pas (ou plus) lire sont récupérées dire
 | Donnée | Méthode |
 |---|---|
 | Documents, bulletins | requête Pronote `Casier` (onglet 103), PDF via `GenerationPDF` |
-| Informations | liste via `PageActualites` ; textes récupérés par la page Pronote elle-même au moment de la connexion |
+| Informations | liste via `PageActualites` ; textes récupérés par la page Pronote elle-même au moment de la connexion ; « lu » via `SaisieActualites` (`genreSaisie: 0`) |
+| Annuaire | requête `ListeRessourcesPourCommunication` (Pronote ne donne pas les e-mails) |
+| Devoirs | archive locale de tous les devoirs de l'année (les identifiants Pronote changent à chaque session : clé stable matière + date + texte) |
 | Fichiers | téléchargés via le serveur local et gardés dans `data/files` (les liens Pronote expirent avec la session) |
 
 ## Données et vie privée
@@ -70,6 +73,9 @@ Le serveur local expose une API JSON. `GET /api` en donne la liste.
 | GET | `/api/file?id=&n=` | Pièce jointe (mise en cache) |
 | GET | `/api/doc/casier?id=&n=` | Document du casier |
 | GET | `/api/doc/bulletin?ident=&n=&period=&year=` | Bulletin en PDF |
+| GET | `/api/homework/range?from=AAAA-MM-JJ&to=AAAA-MM-JJ` | Devoirs sur une période (120 jours max), en direct ou depuis l'archive locale |
+| POST | `/api/news/read` | Marquer une information comme lue / non lue dans Pronote — `{ "key": "...", "read": true }` |
+| GET | `/api/contacts` | Annuaire : professeurs (matières) et personnels (fonction) joignables par la messagerie. `/api/contacts.csv` pour un tableur |
 | GET | `/api/export` | Toutes les données en un fichier JSON |
 
 Exemple :

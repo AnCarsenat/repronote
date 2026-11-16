@@ -1,11 +1,15 @@
 import { h, emptyState, formatAgo } from "../lib.js";
 import { store } from "../state.js";
 
+let contacts = null; // loaded on demand
+let contactsState = "idle"; // idle | loading | error
+let contactsQuery = "";
+
 export default {
   id: "donnees",
   title: "Mes données",
 
-  render(data) {
+  render(data, rerender) {
     const a = data.account;
     const row = (label, value) => (value ? h("div", { class: "detail-row" }, h("span", { class: "muted" }, label), h("span", {}, value)) : null);
     const copyBtn = (text) =>
@@ -45,6 +49,55 @@ export default {
             h("div", { class: "copy-row" }, h("code", {}, a.iCalURL), copyBtn(a.iCalURL)),
           )
         : null,
+
+      h("section", { class: "card wide" },
+        h("div", { class: "row" },
+          h("h2", {}, "Annuaire de l'établissement"),
+          h("a", { class: "button small-btn", href: "/api/contacts.csv", download: "" }, "Exporter (CSV)"),
+        ),
+        h("p", { class: "muted small" }, "Toutes les personnes que vous pouvez contacter par la messagerie Pronote : professeurs (avec leurs matières), personnels (avec leur fonction). Pronote ne communique pas les adresses e-mail."),
+        contacts
+          ? [
+              h("input", {
+                type: "search", class: "search contacts-search", placeholder: "Rechercher un nom, une matière…", value: contactsQuery,
+                oninput: (e) => {
+                  contactsQuery = e.target.value;
+                  rerender();
+                  requestAnimationFrame(() => {
+                    const el = document.querySelector(".contacts-search");
+                    el?.focus();
+                    el?.setSelectionRange(contactsQuery.length, contactsQuery.length);
+                  });
+                },
+              }),
+              h("table", { class: "contacts" },
+                h("thead", {}, h("tr", {}, h("th", {}, "Nom"), h("th", {}, "Type"), h("th", {}, "Matières / fonction"))),
+                h("tbody", {},
+                  contacts
+                    .filter((c) => !contactsQuery || `${c.name} ${c.subjects} ${c.function} ${c.type}`.toLowerCase().includes(contactsQuery.toLowerCase()))
+                    .map((c) => h("tr", {},
+                      h("td", {}, c.name, c.principal ? h("span", { class: "tag" }, "prof. principal") : null),
+                      h("td", { class: "muted small" }, c.type),
+                      h("td", { class: "small" }, c.subjects || c.function || "")))),
+              ),
+            ]
+          : h("button", {
+              type: "button", class: "secondary small-btn", disabled: contactsState === "loading",
+              onclick: async () => {
+                contactsState = "loading";
+                rerender();
+                try {
+                  const r = await fetch("/api/contacts");
+                  if (!r.ok) throw new Error();
+                  contacts = await r.json();
+                  contactsState = "idle";
+                } catch {
+                  contactsState = "error";
+                }
+                rerender();
+              },
+            }, contactsState === "loading" ? "Chargement…" : contactsState === "error" ? "Échec — réessayer" : "Afficher l'annuaire"),
+      ),
 
       h("section", { class: "card wide" },
         h("h2", {}, "Données enregistrées sur cet ordinateur"),

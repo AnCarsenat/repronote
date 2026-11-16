@@ -1,4 +1,5 @@
 import { h, emptyState } from "../lib.js";
+import { pronoteButton } from "../components.js";
 
 let category = "";
 
@@ -88,7 +89,7 @@ export default {
                     h("div", { class: "doc-title" }, d.unread ? h("span", { class: "unread-dot" }) : null, d.name),
                     h("div", { class: "muted small" }, [d.category?.name, d.to ? `disponible jusqu'au ${fmtDate(d.to)}` : null].filter(Boolean).join(" · ")),
                   ),
-                  h("span", { class: "muted small" }, "À télécharger depuis Pronote"),
+                  pronoteButton("Télécharger dans Pronote ↗"),
                 ),
               ),
             ),
