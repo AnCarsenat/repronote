@@ -51,7 +51,10 @@ async function openPage({ interactive }: { interactive: boolean }): Promise<Driv
     console.log(`[android-driver] open ${id} interactive=${interactive}`);
     const opened = waitFor("opened", id, 15_000);
     await control.send({ cmd: "open", id, interactive });
-    await opened;
+    await opened.catch(async (err) => {
+      await control.send({ cmd: "close", id }).catch(() => {});
+      throw err;
+    });
 
     // Find the new WebView among the DevTools targets by its marker title.
     const title = `repronote-login-${id}`;

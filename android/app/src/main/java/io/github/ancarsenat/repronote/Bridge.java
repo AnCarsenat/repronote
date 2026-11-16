@@ -17,6 +17,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Localhost TCP port the Node backend connects to. Every connection starts with
@@ -34,6 +36,7 @@ final class Bridge {
     private final Handler handler;
     private final ServerSocket server;
     private volatile OutputStream controlOut;
+    private final ExecutorService writer = Executors.newSingleThreadExecutor();
 
     Bridge(String token, Handler handler) throws IOException {
         this.token = token;
@@ -48,16 +51,18 @@ final class Bridge {
         return server.getLocalPort();
     }
 
-    /** Sends an event to Node on the control channel. */
-    synchronized void emit(String event, int id) {
-        OutputStream out = controlOut;
-        if (out == null) return;
-        try {
-            out.write((new JSONObject().put("event", event).put("id", id).toString() + "\n").getBytes(StandardCharsets.UTF_8));
-            out.flush();
-        } catch (Exception e) {
-            Log.w(TAG, "control write failed", e);
-        }
+    /** Sends an event to Node on the control channel (off the main thread: Android forbids network I/O there). */
+    void emit(String event, int id) {
+        writer.execute(() -> {
+            OutputStream out = controlOut;
+            if (out == null) return;
+            try {
+                out.write((new JSONObject().put("event", event).put("id", id).toString() + "\n").getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            } catch (Exception e) {
+                Log.w(TAG, "control write failed", e);
+            }
+        });
     }
 
     private void acceptLoop() {
