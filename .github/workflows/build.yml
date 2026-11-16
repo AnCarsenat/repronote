@@ -59,6 +59,7 @@ jobs:
             files: |
               release/*.AppImage
               release/*.deb
+              release/*.tar.gz
           - os: windows-latest
             target: win
             files: release/*.exe
