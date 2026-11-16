@@ -128,6 +128,10 @@ jobs:
     needs: android
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           name: android
@@ -151,11 +155,21 @@ jobs:
             adb logcat -d -s repronote-node:* | grep -q "Pronote UI"
             sleep 5
             adb exec-out screencap -p > screen.png
+            node scripts/android-login-test.mjs
+            adb exec-out screencap -p > login.png
+            for i in $(seq 1 45); do adb logcat -d -s repronote-node:* | grep -q "\[sync\]" && break; sleep 2; done
+            adb exec-out screencap -p > login2.png
+            adb logcat -d -s repronote-node:* repronote:* chromium:* > logcat.txt || true
+            grep -v glBindAttrib logcat.txt | tail -80
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-smoke-screenshot
-          path: screen.png
+          path: |
+            screen.png
+            login.png
+            login2.png
+            logcat.txt
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -164,12 +178,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: install-linux.sh
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           files: |
             artifacts/*
             install-linux.sh

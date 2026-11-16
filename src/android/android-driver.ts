@@ -36,19 +36,36 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let nextId = 1;
 
 export const androidDriver: BrowserDriver = {
-  async openPage({ interactive }) {
+  async openPage(options) {
+    try {
+      return await openPage(options);
+    } catch (err) {
+      console.error(`[android-driver] ${err instanceof Error ? err.stack : err}`);
+      throw err;
+    }
+  },
+};
+
+async function openPage({ interactive }: { interactive: boolean }): Promise<DriverPage> {
     const id = nextId++;
+    console.log(`[android-driver] open ${id} interactive=${interactive}`);
     const opened = waitFor("opened", id, 15_000);
     await control.send({ cmd: "open", id, interactive });
-    await opened;
+    await opened.catch(async (err) => {
+      await control.send({ cmd: "close", id }).catch(() => {});
+      throw err;
+    });
 
     // Find the new WebView among the DevTools targets by its marker title.
     const title = `repronote-login-${id}`;
     let targetId: string | undefined;
     for (let i = 0; i < 50 && !targetId; i++) {
-      targetId = (await listTargets()).find((t) => t.title === title)?.id;
+      const targets = await listTargets();
+      if (i === 0) console.log(`[android-driver] targets: ${targets.map((t) => `${t.type} "${t.title}"`).join(", ")}`);
+      targetId = targets.find((t) => t.title === title)?.id;
       if (!targetId) await sleep(100);
     }
+    console.log(`[android-driver] target ${title}: ${targetId ?? "not found"}`);
     if (!targetId) {
       await control.send({ cmd: "close", id });
       throw new Error("Login WebView not found in DevTools targets");
@@ -140,5 +157,4 @@ export const androidDriver: BrowserDriver = {
       },
     };
     return page;
-  },
-};
+}
