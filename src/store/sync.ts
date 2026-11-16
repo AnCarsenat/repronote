@@ -71,6 +71,8 @@ export async function syncAll(session: pronote.SessionHandle, store: Store): Pro
 
     holidays: async () => session.instance.holidays,
 
+    schoolYear: async () => ({ firstDate: session.instance.firstDate, lastDate: session.instance.lastDate, firstMonday: session.instance.firstMonday }),
+
     // "Mes données": what Pronote knows about you.
     account: async () => {
       const a = await pronote.account(session);
@@ -194,6 +196,22 @@ export async function syncAll(session: pronote.SessionHandle, store: Store): Pro
 
   // Ticks still waiting (failed above) must survive the fresh homework list.
   applyPendingToSnapshot(store);
+  archiveHomework(store, store.get<any[]>("homework") ?? []);
+
+  // Once: fill the archive from the start of the school year, for statistics.
+  if (!store.getSetting("homeworkBackfilled")) {
+    try {
+      const first = startOfDay(session.instance.firstDate);
+      const end = new Date(today.getTime() - 14 * DAY);
+      for (let from = first; from < end; from = new Date(from.getTime() + 60 * DAY)) {
+        const to = new Date(Math.min(from.getTime() + 60 * DAY - 1, end.getTime()));
+        archiveHomework(store, await pronote.assignmentsFromIntervals(session, from, to));
+      }
+      store.setSetting("homeworkBackfilled", true);
+    } catch (err) {
+      failures.backfill = err instanceof Error ? err.message : String(err);
+    }
+  }
   return failures;
 }
 
@@ -250,4 +268,30 @@ function decodeCasier(raw: any) {
     })),
     reports: list(raw.listeBilansPeriodiques).length,
   };
+}
+
+/**
+ * Stable identity of a homework: Pronote's ids change every session, so the
+ * same homework comes back with a new id. Subject + due day + start of text.
+ */
+export function homeworkKey(a: any): string {
+  const d = new Date(a.deadline);
+  const text = String(a.description ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return `${a.subject?.name ?? "?"}|${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}|${text}`;
+}
+
+/**
+ * Every homework ever seen, by stable key (the "homework" snapshot only covers
+ * a few weeks). Used for statistics and for scrolling back/forward in Devoirs.
+ */
+export function archiveHomework(store: Store, items: any[]): void {
+  const old: Record<string, any> = store.get("homeworkArchive") ?? {};
+  // Rebuild by key: also cleans archives made when entries were stored by id.
+  const archive: Record<string, any> = {};
+  for (const a of Object.values(old)) archive[homeworkKey(a)] = a;
+  for (const a of items) {
+    const k = homeworkKey(a);
+    archive[k] = { ...archive[k], ...JSON.parse(JSON.stringify(a)), key: k };
+  }
+  store.put("homeworkArchive", archive);
 }

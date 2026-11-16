@@ -232,3 +232,10 @@ export function safeHTML(html) {
   wrap.append(clean(doc.body));
   return wrap;
 }
+
+/** Stable identity of a homework (Pronote ids change every session). Same as the server's. */
+export function homeworkKey(a) {
+  const d = new Date(a.deadline);
+  const text = String(a.description ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return `${a.subject?.name ?? "?"}|${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}|${text}`;
+}

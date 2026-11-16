@@ -56,8 +56,10 @@ export const relogin = () => runAction("login", "/api/login");
 
 /** Ticks homework: updates the screen at once, then tells the server. */
 export async function setHomeworkDone(id, done) {
-  const list = store.state?.data?.homework?.data;
-  const item = list?.find((a) => a.id === id);
+  // In the synced list, or only in the archive (loaded by scrolling).
+  const item =
+    store.state?.data?.homework?.data?.find((a) => a.id === id) ??
+    Object.values(store.state?.data?.homeworkArchive?.data ?? {}).find((a) => a.id === id);
   if (!item) return;
   const previous = item.done;
   item.done = done;
@@ -114,4 +116,31 @@ export function saveSubjectSettings(value) {
       emit();
     });
   }, 300);
+}
+
+// ---- Informations: read state ----
+/** Marks news as read/unread: on screen at once, then in Pronote. */
+export async function setNewsRead(keys, read) {
+  const items = store.state?.data?.news?.data?.items ?? [];
+  const changed = items.filter((i) => keys.includes(i.key) && i.read !== read);
+  for (const i of changed) i.read = read;
+  emit();
+  for (const i of changed) {
+    try {
+      const r = await call("/api/news/read", { method: "POST", body: JSON.stringify({ key: i.key, read }) });
+      if (r?.ok === false) throw new Error(r.error);
+    } catch {
+      i.read = !read; // revert this one
+      emit();
+    }
+  }
+}
+
+// ---- Homework beyond the synced window (infinite scroll) ----
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Homework due between two dates, fetched live by the server (or its archive offline). */
+export async function fetchHomeworkRange(from, to) {
+  const r = await call(`/api/homework/range?from=${iso(from)}&to=${iso(to)}`);
+  return { items: r.items ?? [], offline: Boolean(r.offline) };
 }

@@ -530,3 +530,91 @@ button.danger { color: var(--bad); border-color: var(--bad); }
 .rich { font-size: 0.92rem; overflow-wrap: anywhere; }
 .rich p { margin: 0 0 6px; }
 .rich ul, .rich ol { margin: 4px 0 6px; padding-left: 20px; }
+
+/* ---- Widgets: settings that fit, full width, scrolling body ---- */
+.widget-settings { min-width: 0; }
+.widget-settings .field { flex-wrap: wrap; row-gap: 4px; }
+.widget-settings .field > span { flex: 1 1 120px; }
+.widget-settings .field select { max-width: 100%; min-width: 0; flex: 1 1 160px; }
+.widget-settings .settings-actions .small-btn:last-child { margin-left: auto; }
+.home-wide { display: grid; gap: 16px; margin-bottom: 16px; }
+.widget-body { min-width: 0; }
+.widget-body.scroll { overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; margin-right: -6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.widget-body.scroll::-webkit-scrollbar { width: 8px; }
+.widget-body.scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+.widget-body.scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.widget-body.scroll { mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent); }
+
+/* ---- Devoirs: endless list ---- */
+.sticky-toolbar { position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 8px 0; margin-top: -8px; }
+.hw-feed { display: grid; gap: 2px; }
+.hw-week + .hw-week { margin-top: 10px; }
+.hw-week-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 14px 0 0; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.hw-week-title::first-letter { text-transform: uppercase; }
+.hw-end { text-align: center; margin: 18px 0 4px; }
+.hw-more { justify-self: center; margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.hw-sentinel { height: 1px; }
+.hw-skeleton { display: grid; gap: 14px; margin-top: 14px; }
+.skeleton-row { display: flex; gap: 10px; }
+.sk-lines { display: grid; gap: 6px; flex: 1; }
+.sk { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--border) 25%, var(--accent-soft) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite linear; }
+.sk-box { width: 18px; height: 18px; flex: none; }
+.sk-line { height: 12px; }
+.sk-line.short { width: 60%; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ---- Informations board ---- */
+.search { font: inherit; font-size: 0.9rem; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); min-width: 0; flex: 1 1 200px; max-width: 320px; }
+.news-panes { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.news-list { list-style: none; margin: 0; padding: 6px; max-height: calc(100vh - 200px); overflow-y: auto; position: sticky; top: 56px; scrollbar-width: thin; }
+.news-item { display: grid; gap: 3px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 8px; padding: 9px 10px; color: var(--text); cursor: pointer; }
+.news-item:hover { background: var(--bg); }
+.news-item.active { background: var(--accent-soft); }
+.news-item-top { display: flex; align-items: baseline; gap: 6px; }
+.news-item-title { flex: 1; font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.news-item.unread .news-item-title { font-weight: 700; }
+.news-item-preview { font-size: 0.82rem; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.news-pane { min-height: 300px; }
+.news-empty { display: grid; place-items: center; min-height: 260px; }
+.news-reader { display: grid; gap: 14px; }
+.news-reader-head { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.news-reader-head h2 { font-size: 1.2rem; margin: 0; }
+.news-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.news-back { display: none; justify-self: start; }
+.news-files h3 { margin: 0 0 6px; }
+a.button { display: inline-block; text-decoration: none; font: inherit; border: 1px solid var(--accent); border-radius: 8px; }
+a.button.secondary { color: var(--accent); background: transparent; }
+@media (max-width: 899px) {
+  .news-panes { grid-template-columns: 1fr; }
+  .news-list { max-height: none; position: static; }
+  .news-board.has-selection .news-list { display: none; }
+  .news-board:not(.has-selection) .news-pane { display: none; }
+  .news-back { display: inline-block; }
+}
+
+/* ---- Statistiques ---- */
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 24px; margin-bottom: 16px; }
+.stat-tile .big { font-size: 1.5rem; }
+.big.good { color: var(--good); }
+.big.bad { color: var(--bad); }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; align-items: start; }
+.stats-grid h2 { margin-bottom: 4px; }
+.swatch.s1 { background: var(--series-1); }
+.swatch.s2 { background: var(--series-2); }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line.s1 { stroke: var(--series-1); }
+.chart .line.s2 { stroke: var(--series-2); }
+.chart .dot { stroke: var(--card); stroke-width: 2; }
+.chart .dot.s1 { fill: var(--series-1); }
+.chart .dot.s2 { fill: var(--series-2); }
+.chart .bar.s1 { fill: var(--series-1); }
+.chart .bar.s2 { fill: var(--series-2); }
+.chart .bar.future { fill-opacity: 0.45; }
+.chart .crosshair { stroke: var(--muted); stroke-width: 1; }
+.chart .row-label { fill: var(--text); font-size: 12px; }
+.chart .value { fill: var(--muted); font-size: 11px; }
+.chart-area .chart-tip { top: 0; }
+.contacts { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+.contacts th { text-align: left; color: var(--muted); font-size: 0.8rem; font-weight: 600; padding: 4px 8px 6px 0; }
+.contacts td { padding: 6px 8px 6px 0; border-top: 1px solid var(--border); vertical-align: top; }
+.contacts .tag { margin-left: 6px; }
