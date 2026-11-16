@@ -17,6 +17,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Localhost TCP port the Node backend connects to. Every connection starts with
@@ -34,6 +36,7 @@ final class Bridge {
     private final Handler handler;
     private final ServerSocket server;
     private volatile OutputStream controlOut;
+    private final ExecutorService writer = Executors.newSingleThreadExecutor();
 
     Bridge(String token, Handler handler) throws IOException {
         this.token = token;
@@ -48,16 +51,18 @@ final class Bridge {
         return server.getLocalPort();
     }
 
-    /** Sends an event to Node on the control channel. */
-    synchronized void emit(String event, int id) {
-        OutputStream out = controlOut;
-        if (out == null) return;
-        try {
-            out.write((new JSONObject().put("event", event).put("id", id).toString() + "\n").getBytes(StandardCharsets.UTF_8));
-            out.flush();
-        } catch (Exception e) {
-            Log.w(TAG, "control write failed", e);
-        }
+    /** Sends an event to Node on the control channel (off the main thread: Android forbids network I/O there). */
+    void emit(String event, int id) {
+        writer.execute(() -> {
+            OutputStream out = controlOut;
+            if (out == null) return;
+            try {
+                out.write((new JSONObject().put("event", event).put("id", id).toString() + "\n").getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            } catch (Exception e) {
+                Log.w(TAG, "control write failed", e);
+            }
+        });
     }
 
     private void acceptLoop() {
@@ -88,6 +93,7 @@ final class Bridge {
             else if (mode.equals("cdp")) cdp(s, in);
             else s.close();
         } catch (Exception e) {
+            Log.w(TAG, "bridge connection failed", e);
             try {
                 s.close();
             } catch (IOException ignored) {}
@@ -109,25 +115,32 @@ final class Bridge {
 
     private void cdp(Socket s, InputStream in) throws IOException {
         LocalSocket devtools = new LocalSocket();
+        Log.i(TAG, "cdp connection");
         devtools.connect(new LocalSocketAddress("webview_devtools_remote_" + android.os.Process.myPid(), LocalSocketAddress.Namespace.ABSTRACT));
-        Thread up = pipe(in, devtools.getOutputStream(), () -> closeQuietly(devtools));
-        pipe(devtools.getInputStream(), s.getOutputStream(), () -> closeQuietly(s));
+        Log.i(TAG, "cdp connected to devtools");
+        Thread up = pipe("node->devtools", in, devtools.getOutputStream(), () -> closeQuietly(devtools));
+        pipe("devtools->node", devtools.getInputStream(), s.getOutputStream(), () -> closeQuietly(s));
         try {
             up.join();
         } catch (InterruptedException ignored) {}
     }
 
-    private static Thread pipe(InputStream from, OutputStream to, Runnable onEnd) {
+    private static Thread pipe(String name, InputStream from, OutputStream to, Runnable onEnd) {
         Thread t = new Thread(() -> {
             byte[] buf = new byte[64 * 1024];
             int n;
+            long total = 0;
             try {
                 while ((n = from.read(buf)) > 0) {
+                    if (total == 0) Log.i(TAG, name + " first bytes: " + new String(buf, 0, Math.min(n, 120), StandardCharsets.ISO_8859_1).replace("\r\n", " | "));
+                    total += n;
                     to.write(buf, 0, n);
                     to.flush();
                 }
-            } catch (IOException ignored) {
+            } catch (IOException e) {
+                Log.i(TAG, name + " error: " + e);
             } finally {
+                Log.i(TAG, name + " ended after " + total + " bytes");
                 onEnd.run();
             }
         }, "bridge-pipe");

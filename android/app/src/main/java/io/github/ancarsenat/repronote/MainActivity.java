@@ -44,13 +44,15 @@ import java.util.Map;
  * shows its web UI in a WebView, and opens the Pronote/ENT login WebViews the
  * server asks for (it drives them through the DevTools protocol).
  */
-public class MainActivity extends Activity implements Bridge.Handler {
+public class MainActivity extends Activity {
     private static final String TAG = "repronote";
 
     // Process-wide: Node lives as long as the process, across activity instances.
     private static Bridge bridge;
     private static int serverPort;
     private static String accessToken;
+    /** The live activity: bridge commands go to it (Android may recreate the activity). */
+    private static MainActivity current;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Map<Integer, WebView> logins = new HashMap<>();
@@ -64,6 +66,8 @@ public class MainActivity extends Activity implements Bridge.Handler {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        current = this;
+        Log.i(TAG, "activity created " + System.identityHashCode(this));
         // Our driver talks to the login WebViews through DevTools (only reachable
         // from this app, or over adb with USB debugging on).
         WebView.setWebContentsDebuggingEnabled(true);
@@ -83,7 +87,11 @@ public class MainActivity extends Activity implements Bridge.Handler {
         if (bridge != null) return;
         accessToken = randomToken();
         String bridgeToken = randomToken();
-        bridge = new Bridge(bridgeToken, this);
+        bridge = new Bridge(bridgeToken, command -> {
+            MainActivity a = current;
+            if (a != null) a.onCommand(command);
+            else bridge.emit("closed", command.optInt("id"));
+        });
         try (ServerSocket probe = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))) {
             serverPort = probe.getLocalPort();
         }
@@ -93,6 +101,7 @@ public class MainActivity extends Activity implements Bridge.Handler {
         env.put("REPRONOTE_ACCESS_TOKEN", accessToken);
         env.put("REPRONOTE_BRIDGE_PORT", Integer.toString(bridge.port()));
         env.put("REPRONOTE_BRIDGE_TOKEN", bridgeToken);
+        env.put("REPRONOTE_DEBUG", "1"); // login steps in logcat (tag repronote-node)
         NodeRunner.start(this, env);
     }
 
@@ -189,8 +198,8 @@ public class MainActivity extends Activity implements Bridge.Handler {
 
     // ---- login WebViews (commands from the Node driver) -------------------------
 
-    @Override
-    public void onCommand(JSONObject command) {
+    void onCommand(JSONObject command) {
+        Log.i(TAG, "bridge command: " + command);
         main.post(() -> {
             String cmd = command.optString("cmd");
             int id = command.optInt("id");
@@ -211,6 +220,7 @@ public class MainActivity extends Activity implements Bridge.Handler {
         wv.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                Log.i(TAG, "login " + id + " page finished: " + url);
                 if (!announced[0]) {
                     announced[0] = true;
                     bridge.emit("opened", id);
@@ -223,6 +233,8 @@ public class MainActivity extends Activity implements Bridge.Handler {
             interactiveId = id;
             overlayContent.addView(wv, match());
             overlay.setVisibility(View.VISIBLE);
+            overlay.bringToFront();
+            Log.i(TAG, "login " + id + " shown in activity " + System.identityHashCode(this));
         } else {
             background.addView(wv, match());
         }
@@ -264,6 +276,8 @@ public class MainActivity extends Activity implements Bridge.Handler {
 
     @Override
     protected void onDestroy() {
+        Log.i(TAG, "activity destroyed " + System.identityHashCode(this));
+        if (current == this) current = null;
         for (Integer id : logins.keySet().toArray(new Integer[0])) closeLogin(id, true);
         super.onDestroy();
     }

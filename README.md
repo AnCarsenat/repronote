@@ -1,32 +1,78 @@
-# repronote
+<h1 align="center">repronote</h1>
 
-Une interface alternative pour **Pronote**, qui tourne sur votre ordinateur.
+<p align="center"><b>Pronote, en mieux.</b> Plus clair, plus rapide, et ça marche même sans internet.</p>
 
-- Fonctionne **hors ligne** : tout est gardé localement (SQLite, ou un fichier JSON sur Android) et synchronisé en arrière-plan.
-- **Accueil modulaire** : widgets à ajouter, régler (largeur, hauteur avec défilement), déplacer entre colonnes — et facile d'écrire les siens.
-- **Tout Pronote** : emploi du temps (avec les trous, détails des cours), devoirs à cocher (liste sans fin jusqu'à la fin de l'année), notes avec moyennes calculées (coefficients, bonus, préréglages bac/brevet), statistiques (évolution de la moyenne, matières, charge de travail), contenus de cours, carnet (absences, retards, punitions), informations (marquer comme lu, recherche), documents (casier, tous les bulletins), annuaire de l'établissement exportable, mes données.
-- Boutons **« Ouvrir dans Pronote »** pour ce qui doit se faire sur le site (sondages, certificats…).
-- **Connexion par l'ENT** dans un vrai navigateur : ni mot de passe ni jeton enregistrés.
-- **API HTTP locale** pour brancher vos propres outils.
+<p align="center">
+  <a href="https://github.com/AnCarsenat/repronote/releases/latest"><b>⬇ Télécharger</b></a> ·
+  <a href="#installer-en-2-minutes">Installer</a> ·
+  <a href="#guide-détaillé">Guide détaillé</a>
+</p>
 
-> Projet indépendant, non affilié à Index Éducation. À utiliser avec votre propre compte.
+<p align="center"><img src="docs/screenshots/accueil.png" alt="L'accueil de repronote : prochain cours, devoirs à faire, dernières notes, évaluations à venir, charge de travail" width="900"></p>
 
-*English: an alternative, offline-first Pronote frontend with a local HTTP API. Login goes through your school's ENT in a real browser; the live session is handed to [pawnote](https://github.com/BlocksHub/Pawnote-LTS). UI in French.*
+<p align="center"><sub>Toutes les captures utilisent des données inventées.</sub></p>
 
-## Télécharger
+## Ce que ça fait
 
-Les versions prêtes à installer sont dans les [Releases](https://github.com/AnCarsenat/repronote/releases) :
+- **Tout sur un seul écran d'accueil** : prochain cours, devoirs, dernières notes, évaluations… Vous choisissez les widgets et leur place.
+- **Emploi du temps lisible**, avec les heures de trou, les cours annulés et les évaluations. Touchez un cours pour voir la salle et le professeur.
+- **Devoirs à cocher**, dans une liste qui défile jusqu'à la fin de l'année, et un graphique de la charge de travail.
+- **Vraie moyenne générale** : coefficients des matières, bonus, préréglages bac et brevet, simulateurs d'examen.
+- **Statistiques** : évolution de la moyenne, matière par matière.
+- **Tout le reste de Pronote** : informations (à marquer comme lues), carnet (absences, retards, punitions), contenus de cours, documents et bulletins, annuaire des professeurs.
+- **Hors ligne** : tout est gardé sur votre appareil, vous pouvez consulter sans réseau.
+- **Thème sombre**, onglets à masquer, taille du texte… dans les Réglages.
+
+| | |
+|---|---|
+| <img src="docs/screenshots/emploi-du-temps.png" alt="Emploi du temps de la semaine avec les pauses" width="440"> | <img src="docs/screenshots/notes.png" alt="Notes par matière avec la moyenne générale calculée" width="440"> |
+| **Emploi du temps** avec les trous | **Notes** et moyenne calculée |
+| <img src="docs/screenshots/statistiques.png" alt="Statistiques : évolution de la moyenne" width="440"> | <img src="docs/screenshots/sombre.png" alt="L'accueil en thème sombre" width="440"> |
+| **Statistiques** | **Thème sombre** |
+
+<p align="center"><img src="docs/screenshots/mobile.png" alt="repronote sur téléphone" width="260"></p>
+
+## Installer en 2 minutes
+
+Allez sur la **[page de la dernière version](https://github.com/AnCarsenat/repronote/releases/latest)** et prenez le fichier qui correspond à votre appareil :
+
+| Vous avez… | Fichier à prendre | Puis |
+|---|---|---|
+| 📱 **Android** | `…-android-arm64-v8a.apk` | Ouvrez-le. Si le téléphone le demande, autorisez « installer des applications inconnues » pour votre navigateur. |
+| 🪟 **Windows** | `…-win-x64.exe` | Lancez-le. Si Windows affiche « Windows a protégé votre ordinateur », cliquez **Informations complémentaires** puis **Exécuter quand même** (l'application n'est pas encore signée). |
+| 🐧 **Linux** (Ubuntu, Mint, Debian…) | `…-linux-amd64.deb` | Double-cliquez dessus pour l'installer. |
+| 🐧 **Linux** (autre) | `…-linux-x86_64.AppImage` | Clic droit → Propriétés → « Autoriser l'exécution », puis double-clic. |
+
+Ensuite :
+
+1. Ouvrez Pronote comme d'habitude dans votre navigateur (en passant par l'ENT si besoin) et **copiez l'adresse** de la page. Elle ressemble à `https://0000000a.index-education.net/pronote/…`.
+2. Ouvrez repronote et **collez cette adresse**.
+3. Une fenêtre de connexion s'ouvre : **connectez-vous comme d'habitude** (ENT ou Pronote).
+
+C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT vous garde connecté.
+
+> repronote ne garde ni votre mot de passe ni rien d'autre ailleurs que sur votre appareil. C'est un projet indépendant, non affilié à Index Éducation.
+
+**Un problème ?** [Ouvrez un ticket](https://github.com/AnCarsenat/repronote/issues) en décrivant ce que vous avez fait et ce qui s'est affiché.
+
+*English: an alternative, offline-first Pronote frontend (desktop, Android, or a local server with an HTTP API and MCP). Login goes through your school's ENT in a real browser; the live session is handed to [pawnote](https://github.com/BlocksHub/Pawnote-LTS). UI in French.*
+
+---
+
+# Guide détaillé
+
+## Tous les fichiers
 
 | Fichier | Pour |
 |---|---|
-| `repronote-…-win-x64.exe` | Windows (installateur ; non signé : cliquez « Informations complémentaires » puis « Exécuter quand même ») |
-| `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (rendre exécutable puis lancer ; pas besoin de `fuse2`/`libfuse2`) |
-| `repronote-…-linux-x64.tar.gz` | Linux sans AppImage : extraire puis lancer `./repronote` |
+| `repronote-…-win-x64.exe` | Windows (installateur) |
+| `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (pas besoin de `fuse2`/`libfuse2`) |
 | `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
-| `repronote-…-android-arm64-v8a.apk` | Android 7+ (presque tous les téléphones ; `armeabi-v7a` pour les très anciens, `x86_64` pour les émulateurs). Autorisez l'installation depuis cette source. |
+| `repronote-…-linux-x64.tar.gz` | Linux sans AppImage : extraire puis lancer `./repronote` |
+| `repronote-…-android-arm64-v8a.apk` | Android 7+ (presque tous les téléphones) |
+| `repronote-…-android-armeabi-v7a.apk` | Anciens téléphones Android 32 bits |
+| `repronote-…-android-x86_64.apk` | Émulateurs Android, Chromebooks x86 |
 | `repronote-server-….zip` | Le serveur seul (Node ≥ 24 + Chromium), pour un serveur ou un Raspberry Pi |
-
-Au premier lancement, collez l'adresse Pronote de votre établissement : une fenêtre s'ouvre pour vous connecter (ENT ou Pronote).
 
 ## Depuis les sources
 
@@ -166,6 +212,8 @@ web/
 | `npm run dist:linux` | AppImage + .deb + .tar.gz dans `release/` |
 | `npm run dist:win` | installateur Windows (sur Windows) |
 | `npm run dist:server` | `release/repronote-server/` |
+| `node scripts/demo-data.mjs <dossier>` | Données inventées pour essayer ou faire des captures : `REPRONOTE_DATA_DIR=<dossier> npm run serve` |
+| `node scripts/screenshots.mjs <url> docs/screenshots` | Les captures de ce README |
 | `npm run dist:android` | APK Android (un par architecture) dans `android/app/build/outputs/apk/release/` — demande le SDK Android (avec NDK et CMake) et Java 17+ |
 
 Le workflow GitHub `.github/workflows/build.yml` construit tout à chaque push ; un tag `v1.2.3` publie une Release avec les fichiers.

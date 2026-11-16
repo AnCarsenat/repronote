@@ -54,18 +54,38 @@ export type CdpTarget = { id: string; type: string; title: string; url: string; 
 export async function listTargets(): Promise<CdpTarget[]> {
   const socket = await open("cdp");
   return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    socket.on("data", (c: Buffer) => chunks.push(c));
-    socket.on("error", reject);
-    socket.on("close", () => {
-      const raw = Buffer.concat(chunks).toString("utf8");
-      const body = raw.slice(raw.indexOf("\r\n\r\n") + 4);
+    let raw = Buffer.alloc(0);
+    let settled = false;
+    const finish = (err: Error | null, value?: CdpTarget[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (err) reject(err);
+      else resolve(value!);
+    };
+    const timer = setTimeout(() => finish(new Error(`DevTools target list timed out (got: ${raw.toString("utf8").slice(0, 200) || "nothing"})`)), 5000);
+    // The DevTools server keeps the connection open (ignores "Connection: close"):
+    // stop as soon as Content-Length bytes of body have arrived.
+    const tryParse = (final: boolean) => {
+      const headEnd = raw.indexOf("\r\n\r\n");
+      if (headEnd < 0) return final && finish(new Error("Bad DevTools response"));
+      const head = raw.subarray(0, headEnd).toString("latin1");
+      const length = Number(/content-length:\s*(\d+)/i.exec(head)?.[1] ?? NaN);
+      const body = raw.subarray(headEnd + 4);
+      if (Number.isFinite(length) ? body.length < length : !final) return final && finish(new Error("Truncated DevTools response"));
       try {
-        resolve(JSON.parse(body));
-      } catch (err) {
-        reject(new Error(`Bad DevTools target list: ${raw.slice(0, 200)}`));
+        finish(null, JSON.parse(body.subarray(0, Number.isFinite(length) ? length : body.length).toString("utf8")));
+      } catch {
+        finish(new Error(`Bad DevTools target list: ${raw.toString("utf8").slice(0, 200)}`));
       }
+    };
+    socket.on("data", (c: Buffer) => {
+      raw = Buffer.concat([raw, c]);
+      tryParse(false);
     });
+    socket.on("error", (e) => finish(e));
+    socket.on("close", () => tryParse(true));
     socket.write("GET /json/list HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
   });
 }
