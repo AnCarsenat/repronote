@@ -27,9 +27,29 @@ const login = (await (await fetch("http://127.0.0.1:9222/json/list")).json()).fi
 if (login) {
   const lw = new WebSocket(login.webSocketDebuggerUrl);
   await new Promise((r, j) => ((lw.onopen = r), (lw.onerror = j)));
-  const click = `(() => { const b = [...document.querySelectorAll("button, [role=button], input[type=submit]")].find((e) => /se connecter/i.test(e.textContent || e.value || "")); if (b) b.click(); return !!b; })()`;
-  const reply = new Promise((r) => (lw.onmessage = (m) => r(JSON.parse(m.data))));
-  lw.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression: click, returnByValue: true } }));
-  console.log("clicked:", JSON.stringify((await reply).result?.result?.value));
+  let nextId = 1;
+  const pending = new Map();
+  lw.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    pending.get(msg.id)?.(msg.result);
+  };
+  const send = (method, params = {}) => new Promise((r) => {
+    const id = nextId++;
+    pending.set(id, r);
+    lw.send(JSON.stringify({ id, method, params }));
+  });
+  // The innermost element reading exactly "Se connecter", tapped like a finger would.
+  const find = `(() => {
+    const el = [...document.querySelectorAll("body *")].filter((e) => e.textContent.trim() === "Se connecter").pop();
+    if (!el) return null;
+    el.scrollIntoView({ block: "center" });
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, tag: el.tagName };
+  })()`;
+  const at = (await send("Runtime.evaluate", { expression: find, returnByValue: true })).result.value;
+  console.log("button:", JSON.stringify(at));
+  if (at) {
+    for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
+  }
   lw.close();
 } else console.log("login page not found");
