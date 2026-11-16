@@ -1,4 +1,4 @@
-# Builds the desktop apps (Linux, Windows) and the standalone Node server.
+# Builds the desktop apps (Linux, Windows), the Android app and the standalone Node server.
 # - Every push / pull request: build and keep the files as workflow artifacts.
 # - A version tag (v1.2.3): also publish them as a GitHub release.
 name: Build
@@ -79,9 +79,86 @@ jobs:
           name: desktop-${{ matrix.target }}
           path: ${{ matrix.files }}
 
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm run build
+      - name: Signing key (optional, from repository secrets)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+      - name: Build APKs
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          VERSION=$(node -p "require('../package.json').version")
+          ./gradlew assembleRelease --no-daemon -PversionName="$VERSION" -PversionCode="${{ github.run_number }}"
+          mkdir -p ../release
+          for f in app/build/outputs/apk/release/*.apk; do
+            abi=$(basename "$f" .apk | sed -E 's/^app-(.*)-release(-unsigned)?$/\1/')
+            cp "$f" "../release/repronote-$VERSION-android-$abi.apk"
+          done
+          ls -la ../release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: release/*.apk
+
+  # Installs the x86_64 APK on an emulator and checks the app starts its server and UI.
+  android-smoke:
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r apk/*-android-x86_64.apk
+            adb shell am start -W -n io.github.ancarsenat.repronote/.MainActivity
+            for i in $(seq 1 60); do adb logcat -d -s repronote-node:* | grep -q "Pronote UI" && break; sleep 2; done
+            adb logcat -d -s repronote-node:* repronote:*
+            adb logcat -d -s repronote-node:* | grep -q "Pronote UI"
+            sleep 5
+            adb exec-out screencap -p > screen.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke-screenshot
+          path: screen.png
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [server, desktop]
+    needs: [server, desktop, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write

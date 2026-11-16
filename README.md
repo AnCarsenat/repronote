@@ -2,7 +2,7 @@
 
 Une interface alternative pour **Pronote**, qui tourne sur votre ordinateur.
 
-- Fonctionne **hors ligne** : tout est gardé localement (SQLite) et synchronisé en arrière-plan.
+- Fonctionne **hors ligne** : tout est gardé localement (SQLite, ou un fichier JSON sur Android) et synchronisé en arrière-plan.
 - **Accueil modulaire** : widgets à ajouter, régler (largeur, hauteur avec défilement), déplacer entre colonnes — et facile d'écrire les siens.
 - **Tout Pronote** : emploi du temps (avec les trous, détails des cours), devoirs à cocher (liste sans fin jusqu'à la fin de l'année), notes avec moyennes calculées (coefficients, bonus, préréglages bac/brevet), statistiques (évolution de la moyenne, matières, charge de travail), contenus de cours, carnet (absences, retards, punitions), informations (marquer comme lu, recherche), documents (casier, tous les bulletins), annuaire de l'établissement exportable, mes données.
 - Boutons **« Ouvrir dans Pronote »** pour ce qui doit se faire sur le site (sondages, certificats…).
@@ -22,9 +22,10 @@ Les versions prêtes à installer sont dans les [Releases](https://github.com/An
 | `repronote-…-win-x64.exe` | Windows (installateur ; non signé : cliquez « Informations complémentaires » puis « Exécuter quand même ») |
 | `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (rendre exécutable puis lancer) |
 | `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
+| `repronote-…-android-arm64-v8a.apk` | Android 7+ (presque tous les téléphones ; `armeabi-v7a` pour les très anciens, `x86_64` pour les émulateurs). Autorisez l'installation depuis cette source. |
 | `repronote-server-….zip` | Le serveur seul (Node ≥ 24 + Chromium), pour un serveur ou un Raspberry Pi |
 
-Au premier lancement, collez l'adresse Pronote de votre établissement : une fenêtre s'ouvre pour vous connecter (ENT ou Pronote). Android viendra plus tard.
+Au premier lancement, collez l'adresse Pronote de votre établissement : une fenêtre s'ouvre pour vous connecter (ENT ou Pronote).
 
 ## Depuis les sources
 
@@ -160,14 +161,17 @@ web/
 
 | Commande | Produit |
 |---|---|
-| `npm run build` | `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs` (esbuild) |
+| `npm run build` | `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs`, `dist/android.mjs` (esbuild) |
 | `npm run dist:linux` | AppImage + .deb dans `release/` |
 | `npm run dist:win` | installateur Windows (sur Windows) |
 | `npm run dist:server` | `release/repronote-server/` |
+| `npm run dist:android` | APK Android (un par architecture) dans `android/app/build/outputs/apk/release/` — demande le SDK Android (avec NDK et CMake) et Java 17+ |
 
 Le workflow GitHub `.github/workflows/build.yml` construit tout à chaque push ; un tag `v1.2.3` publie une Release avec les fichiers.
 
 L'application de bureau lance le serveur dans Electron et utilise ses propres fenêtres pour la connexion (pas de Playwright) ; ses données sont dans le profil utilisateur (`~/.config/repronote/data`, `%APPDATA%\repronote\data`).
+
+L'application Android embarque Node (nodejs-mobile 18, téléchargé au premier build) qui lance le même serveur (`dist/android.mjs`) ; l'interface est une WebView sur ce serveur. La connexion ENT se fait dans une seconde WebView, pilotée par le protocole DevTools comme les fenêtres Electron. Les autres applications du téléphone pouvant joindre `127.0.0.1`, le serveur exige un jeton secret (cookie) que seule l'application connaît.
 
 ## Licence
 

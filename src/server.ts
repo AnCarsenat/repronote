@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
+import { timingSafeEqual } from "node:crypto";
 import { rawRequest } from "./core/raw-request.ts";
 import { attachmentURL } from "./core/attachments.ts";
 import { cacheFromURL, readCached, type CachedFile } from "./store/files.ts";
@@ -49,7 +50,7 @@ const WEB_DIR = fileURLToPath(new URL("../web/", import.meta.url));
 
 const CORE_KINDS = ["user", "homework", "timetable", "grades", "pending"];
 
-const store = new Store();
+const store = await Store.open();
 let pronoteURL: string | null = (await loadConfig())?.url ?? null;
 // News texts already stored don't need to be fetched again at login.
 setKnownNews((store.get<any>("news")?.items ?? []).filter((i: any) => i.questions).map((i: any) => i.key));
@@ -179,7 +180,21 @@ const state = () => ({
  * - CSRF: a site could POST "simple" requests (no CORS preflight). Reject
  *   state-changing requests whose Origin isn't this server.
  */
+/**
+ * Android: other apps on the phone can reach localhost too, so the app gives
+ * us a secret and its WebView sends it as a cookie with every request.
+ */
+const ACCESS_TOKEN = process.env.REPRONOTE_ACCESS_TOKEN ?? "";
+
+function hasAccessToken(req: IncomingMessage): boolean {
+  const cookie = /(?:^|;\s*)repronote_token=([^;]+)/.exec(req.headers.cookie ?? "")?.[1] ?? "";
+  const a = Buffer.from(cookie);
+  const b = Buffer.from(ACCESS_TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 function allowedRequest(req: IncomingMessage): boolean {
+  if (ACCESS_TOKEN && !hasAccessToken(req)) return false;
   const host = req.headers.host ?? "";
   const local = HOST === "127.0.0.1" || HOST === "localhost";
   if (local && !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host)) return false;
