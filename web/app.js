@@ -1,0 +1,107 @@
+import { h, formatAgo } from "./lib.js";
+import { store, subscribe, refresh, syncNow, relogin, data } from "./state.js";
+import home from "./views/home.js";
+import timetable from "./views/timetable.js";
+import homework from "./views/homework.js";
+import grades from "./views/grades.js";
+import resources from "./views/resources.js";
+import notebook from "./views/notebook.js";
+import news from "./views/news.js";
+import documents from "./views/documents.js";
+import account from "./views/account.js";
+
+const views = [home, timetable, homework, grades, resources, notebook, news, documents, account];
+const $ = (id) => document.getElementById(id);
+
+const currentView = () => views.find((v) => location.hash === `#/${v.id}`) ?? home;
+
+function renderHeader() {
+  const user = store.state?.data?.user?.data;
+  $("who").textContent = user?.name ?? "Pronote";
+  $("sub").textContent = user ? [user.className, user.establishment].filter(Boolean).join(" · ") : "";
+
+  const view = currentView();
+  $("nav").replaceChildren(
+    ...views.map((v) =>
+      h("a", { href: `#/${v.id}`, class: v === view ? "active" : "", "aria-current": v === view ? "page" : false }, v.title),
+    ),
+  );
+
+  const s = store.state;
+  const syncBtn = h("button", { type: "button", class: "secondary small-btn", disabled: Boolean(store.busy), onclick: syncNow },
+    store.busy === "sync" || s?.syncing ? "Synchronisation…" : "Actualiser");
+  $("status").replaceChildren(
+    h("span", { class: `dot ${s?.lastSync?.ok === false || store.serverDown ? "bad" : "ok"}` }),
+    h("span", { class: "muted small" }, `Synchro ${formatAgo(s?.lastSuccessfulSync)}${s?.pending ? ` · ${s.pending} action(s) en attente` : ""}`),
+    syncBtn,
+  );
+}
+
+function renderBanner() {
+  const banner = $("banner");
+  const last = store.state?.lastSync;
+  const since = formatAgo(store.state?.lastSuccessfulSync);
+  let kind = null;
+  let content = [];
+
+  if (store.serverDown) {
+    kind = "error";
+    content = ["Serveur local injoignable. Lancez « npm run serve »."];
+  } else if (store.busy === "login") {
+    kind = "info";
+    content = ["Connexion en cours… Connectez-vous dans la fenêtre qui s'est ouverte."];
+  } else if (last && !last.ok && !store.busy) {
+    if (last.errorKind === "offline") {
+      kind = "warn";
+      content = [`Hors ligne. Affichage des données ${since}. Les devoirs cochés seront envoyés au retour de la connexion.`];
+    } else if (last.errorKind === "login") {
+      kind = "warn";
+      content = [
+        h("span", {}, `Session ENT expirée (données ${since}). La reconnexion ouvre une fenêtre sur cet ordinateur.`),
+        h("button", { type: "button", onclick: relogin }, "Se reconnecter"),
+      ];
+    } else {
+      kind = "error";
+      content = [
+        h("span", {}, `Erreur de synchronisation (données ${since}).`),
+        h("details", {}, h("summary", {}, "Détails"), last.message ?? ""),
+      ];
+    }
+  }
+
+  banner.hidden = !kind;
+  banner.className = `banner ${kind ?? ""}`;
+  banner.replaceChildren(...content.map((c) => (typeof c === "string" ? h("span", {}, c) : c)));
+}
+
+function renderView() {
+  const view = currentView();
+  document.title = view === home ? "Pronote" : `${view.title} · Pronote`;
+  let nodes;
+  try {
+    nodes = view.render(data(), renderView);
+  } catch (err) {
+    console.error(err);
+    nodes = h("p", { class: "empty" }, `Erreur d'affichage : ${err.message}`);
+  }
+  // Keep the scroll position when re-rendering the same view.
+  const y = window.scrollY;
+  $("view").replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
+  window.scrollTo(0, y);
+}
+
+function render() {
+  renderHeader();
+  renderBanner();
+  renderView();
+}
+
+subscribe(render);
+window.addEventListener("hashchange", () => {
+  render();
+  window.scrollTo(0, 0);
+});
+
+render();
+refresh();
+setInterval(refresh, 60_000); // new data from background syncs, and "now" times

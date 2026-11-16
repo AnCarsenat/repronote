@@ -1,16 +1,23 @@
 {
-  "name": "pronote",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "repronote",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interface alternative pour Pronote : hors ligne, widgets, API locale. Connexion via l'ENT dans un vrai navigateur.",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnCarsenat/repronote.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "homework": "node src/cli/homework.ts",
     "typecheck": "tsc --noEmit",
-    "login": "node src/cli/login.ts"
+    "login": "node src/cli/login.ts",
+    "serve": "node src/server.ts"
   },
-  "keywords": [],
-  "type": "module",
   "dependencies": {
     "@blockshub/pawnote-lts": "^1.6.4",
     "playwright-core": "^1.65.1"

@@ -50,6 +50,8 @@ type Captured = {
   userParameters?: any;
   userLoaded: boolean;
   pending: number;
+  /** Short log of the page's Pronote traffic, for error reports. */
+  trace: string[];
   lastActivity: number;
 };
 
@@ -72,34 +74,71 @@ export async function openBrowserSession(options: Options): Promise<pronote.Sess
   });
 
   try {
-    const page = context.pages()[0] ?? (await context.newPage());
-    const captured = watchPronoteTraffic(page);
-
-    // Look like a fresh browser to Pronote (its storage holds a navigator id
-    // tied to earlier sessions). ENT cookies live on another origin and stay.
-    const cdp = await context.newCDPSession(page);
-    await cdp.send("Storage.clearDataForOrigin", { origin: new URL(base).origin, storageTypes: "all" });
-    await cdp.detach();
-
-    await page.goto(`${base}/${SPACE_PAGE[kind]}?fd=1`);
-    await waitUntilReady(page, captured, options.interactive);
-
-    const frozen = await freezeWithRetry(page).catch(async (err) => {
-      await page.screenshot({ path: `${BROWSER_PROFILE_DIR}/../last-error.png`, fullPage: true }).catch(() => {});
-      throw err;
-    });
-    if (!captured.start) throw new Error("Did not see the Pronote page load (no Start(...) call).");
-    if (!captured.instanceParameters) throw new Error("Did not capture FonctionParametres.");
-    if (!captured.userParameters) throw new Error("Did not capture ParametresUtilisateur.");
-
-    return await toPawnoteSession(base, kind, captured, frozen);
+    // The school server sometimes drops a script download; Pronote's page
+    // then logs itself out ("Échec lors du chargement de la page"). Retry.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await attemptSession(context, base, kind, options.interactive);
+      } catch (err) {
+        if (!(err instanceof PageStartFailed) || attempt >= MAX_ATTEMPTS) throw err;
+        console.error(`Pronote page failed to start (attempt ${attempt}/${MAX_ATTEMPTS}), retrying...`);
+      }
+    }
   } finally {
     await closeQuietly(context);
   }
 }
 
+const MAX_ATTEMPTS = 3;
+
+/** The page loaded but Pronote couldn't start its session in it. Worth retrying. */
+class PageStartFailed extends Error {
+  name = "PageStartFailed";
+}
+
+async function attemptSession(
+  context: BrowserContext,
+  base: string,
+  kind: pronote.AccountKind,
+  interactive: boolean,
+): Promise<pronote.SessionHandle> {
+  const page = await context.newPage();
+  for (const other of context.pages()) if (other !== page) await other.close().catch(() => {});
+  const captured = watchPronoteTraffic(page);
+
+  // Look like a fresh browser to Pronote (its storage holds a navigator id
+  // tied to earlier sessions). ENT cookies live on another origin and stay.
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Storage.clearDataForOrigin", { origin: new URL(base).origin, storageTypes: "all" });
+  await cdp.detach();
+
+  await page.goto(`${base}/${SPACE_PAGE[kind]}?fd=1`);
+  await waitUntilReady(page, captured, interactive);
+
+  // News texts: Pronote 2026 rejects our own detail request, but its page can
+  // fetch them. Only items not seen before. Must run before the freeze.
+  try {
+    const found = await page.evaluate(newsFromPage, [...knownNews]);
+    for (const item of found.items) pageNews.set(item.key, item);
+    console.log(`[news] ${found.total} in list, ${found.items.length} texts fetched${found.errors.length ? `, ${found.errors.length} failed: ${found.errors.slice(0, 3).join(" | ")}` : ""}`);
+  } catch (err) {
+    console.error(`[news] ${err instanceof Error ? err.message : err}`);
+  }
+
+  const frozen = await freezeWithRetry(page).catch(async (err) => {
+    await page.screenshot({ path: `${BROWSER_PROFILE_DIR}/../last-error.png`, fullPage: true }).catch(() => {});
+    const message = `${err instanceof Error ? err.message : err}\nPronote traffic: ${captured.trace.join(" | ")}`;
+    throw new PageStartFailed(message);
+  });
+  if (!captured.start) throw new Error("Did not see the Pronote page load (no Start(...) call).");
+  if (!captured.instanceParameters) throw new Error("Did not capture FonctionParametres.");
+  if (!captured.userParameters) throw new Error("Did not capture ParametresUtilisateur.");
+
+  return toPawnoteSession(base, kind, captured, frozen);
+}
+
 function watchPronoteTraffic(page: Page): Captured {
-  const captured: Captured = { userLoaded: false, pending: 0, lastActivity: Date.now() };
+  const captured: Captured = { userLoaded: false, pending: 0, lastActivity: Date.now(), trace: [] };
   const isApi = (url: string) => url.includes("/appelfonction/");
 
   page.on("request", (req) => {
@@ -114,7 +153,10 @@ function watchPronoteTraffic(page: Page): Captured {
       captured.lastActivity = Date.now();
     }
   };
-  page.on("requestfailed", (req) => done(req.url()));
+  page.on("requestfailed", (req) => {
+    captured.trace.push(`FAILED ${new URL(req.url()).pathname.split("/").slice(-3).join("/")} ${req.failure()?.errorText}`);
+    done(req.url());
+  });
 
   page.on("response", async (res) => {
     const url = res.url();
@@ -124,6 +166,7 @@ function watchPronoteTraffic(page: Page): Captured {
         if (match) captured.start = JSON.parse(match[1]);
       } else if (isApi(url)) {
         const body = JSON.parse(await res.text());
+        captured.trace.push(`${body.id ?? body.nom ?? "?"} ${res.status()}${body.Erreur ? ` Erreur=${JSON.stringify(body.Erreur).slice(0, 150)}` : ""}`);
         const data = body.dataSec ?? body.donneesSec;
         if (typeof data === "string") {
           throw new Error("This Pronote server encrypts its traffic; not supported yet.");
@@ -335,4 +378,82 @@ export async function closeSession(session: pronote.SessionHandle): Promise<void
     headers: { "Content-Type": "text/plain;charset=UTF-8" },
     body: JSON.stringify({ ns: information.id, no: order }),
   }).catch(() => {});
+}
+
+// ---- News details fetched by Pronote's own page ----
+
+export type PageNewsQuestion = {
+  title: string;
+  html: string;
+  attachments: Array<{ id: string; name: string; kind: number; url?: string }>;
+  choices: string[];
+  answered: boolean;
+};
+
+/** Details by newsKey(title, creation date): ids change every session, these don't. */
+export const pageNews = new Map<string, { key: string; questions: PageNewsQuestion[] }>();
+let knownNews = new Set<string>();
+
+/** Keys whose details we already have (skipped at next login). */
+export function setKnownNews(keys: Iterable<string>): void {
+  knownNews = new Set(keys);
+}
+
+/**
+ * Normalized title + creation day: the same on the page and in our list.
+ * (The page holds titles HTML-escaped, e.g. &#39; for apostrophes.)
+ */
+export function newsKey(title: string, created: string | number | Date | null): string {
+  const t = String(title ?? "").replace(/&#0*39;|&apos;|[’‘`´]/g, "'").replace(/&amp;/g, "&").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
+  const d = created ? new Date(created) : null;
+  return `${t}|${d ? `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` : ""}`;
+}
+
+/** Runs inside the Pronote page, with Pronote's own request classes. */
+async function newsFromPage(known: string[]) {
+  const req = (window as any).require;
+  const R = req("objetrequetepageactualites.js");
+  const TEN = req("typeensemblenombre.js");
+  const items = (l: any): any[] => l?.ListeElements ?? (Array.isArray(l) ? l : []);
+  // Same as newsKey() (functions can't be passed into the page).
+  const keyOf = (a: any) => {
+    const t = String(a.Libelle ?? "").replace(/&#0*39;|&apos;|[’‘`´]/g, "'").replace(/&amp;/g, "&").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
+    const d = a.dateCreation ? new Date(a.dateCreation) : null;
+    return `${t}|${d ? `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` : ""}`;
+  };
+  const skip = new Set(known);
+
+  const modes = new TEN.TypeEnsembleNombre();
+  modes.add(0);
+  const list = await new R.ObjetRequetePageActualites(null).lancerRequete({ genreRequeteActualite: 0, modesAffActus: modes });
+  const modesAff = list?.listeModesAff;
+  const first = Array.isArray(modesAff) ? modesAff[0] : modesAff?.get?.(0) ?? items(modesAff)[0];
+
+  const out = [];
+  const errors: string[] = [];
+  const all = items(first?.listeActualites);
+  for (const actu of all.slice(0, 80)) {
+    const key = keyOf(actu);
+    if (skip.has(key)) continue;
+    let det: any;
+    try {
+      det = await new R.ObjetRequetePageActualites(null).lancerRequete({ genreRequeteActualite: 1, modeAffActu: 0, actualite: actu });
+    } catch (e: any) {
+      errors.push(`${actu.Libelle}: ${e?.message ?? e}`);
+      continue;
+    }
+    if (!det?.detailsActualite) {
+      errors.push(`${actu.Libelle}: no details (${Object.keys(det ?? {}).join(",")})`);
+      continue;
+    }
+    const questions = items(det?.detailsActualite?.listeQuestions).map((q: any) => ({
+      title: q.titre || "",
+      html: q.texte || "",
+      attachments: items(q.listePiecesJointes).map((f: any) => ({ id: f.Numero, name: f.Libelle, kind: f.Genre ?? 1, url: f.url })),
+      choices: items(q.listeChoix).map((c: any) => c.Libelle),
+      answered: Boolean(q.reponse?.avecReponse),
+    }));
+    out.push({ key, questions });
+  }
+  return { items: out, errors, total: all.length };
 }
