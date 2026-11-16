@@ -13,10 +13,10 @@ export class LiveSession {
   private lock: Promise<unknown> = Promise.resolve();
 
   /** Runs `fn` with a working session, one call at a time. */
-  use<T>(fn: (session: pronote.SessionHandle) => Promise<T>, { interactive = false } = {}): Promise<T> {
+  use<T>(fn: (session: pronote.SessionHandle) => Promise<T>, { interactive = false, url }: { interactive?: boolean; url?: string } = {}): Promise<T> {
     const run = async () => {
       if (interactive) await this.reset();
-      let session = await this.get(interactive);
+      let session = await this.get(interactive, url);
       try {
         return await fn(session);
       } catch (err) {
@@ -45,9 +45,9 @@ export class LiveSession {
     }
   }
 
-  private async get(interactive: boolean): Promise<pronote.SessionHandle> {
+  private async get(interactive: boolean, url?: string): Promise<pronote.SessionHandle> {
     if (this.session) return this.session;
-    this.opening ??= (interactive ? interactiveLogin() : getSession({ allowWindow: false })).finally(
+    this.opening ??= (interactive ? interactiveLogin(url) : getSession({ allowWindow: false })).finally(
       () => (this.opening = null),
     );
     const session = await this.opening;

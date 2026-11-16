@@ -4,6 +4,8 @@ import { store } from "../state.js";
 let contacts = null; // loaded on demand
 let contactsState = "idle"; // idle | loading | error
 let contactsQuery = "";
+let emailsState = "idle"; // idle | loading | error
+let emailsError = "";
 
 export default {
   id: "donnees",
@@ -53,9 +55,32 @@ export default {
       h("section", { class: "card wide" },
         h("div", { class: "row" },
           h("h2", {}, "Annuaire de l'établissement"),
-          h("a", { class: "button small-btn", href: "/api/contacts.csv", download: "" }, "Exporter (CSV)"),
+          h("div", { class: "contacts-actions" },
+            h("button", {
+              type: "button", class: "secondary small-btn", disabled: emailsState === "loading",
+              onclick: async () => {
+                emailsState = "loading";
+                emailsError = "";
+                rerender();
+                try {
+                  const r = await fetch("/api/contacts/emails", { method: "POST" });
+                  const body = await r.json();
+                  if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+                  contacts = body;
+                  emailsState = "idle";
+                } catch (err) {
+                  emailsState = "error";
+                  emailsError = err.message;
+                }
+                rerender();
+              },
+            }, emailsState === "loading" ? "Connexion au webmail…" : "Rechercher les adresses e-mail"),
+            h("a", { class: "button small-btn", href: "/api/contacts.csv", download: "" }, "Exporter (CSV)"),
+          ),
         ),
-        h("p", { class: "muted small" }, "Toutes les personnes que vous pouvez contacter par la messagerie Pronote : professeurs (avec leurs matières), personnels (avec leur fonction). Pronote ne communique pas les adresses e-mail."),
+        h("p", { class: "muted small" }, "Toutes les personnes que vous pouvez contacter par la messagerie Pronote : professeurs (avec leurs matières), personnels (avec leur fonction). Pronote ne donne pas les e-mails : « Rechercher les adresses e-mail » ouvre le webmail de l'ENT (connectez-vous dans la fenêtre) et cherche chaque personne de cette liste, une par une, avec l'autocomplétion du webmail."),
+        emailsState === "loading" ? h("p", { class: "banner info" }, "Connectez-vous au webmail dans la fenêtre qui s'est ouverte, puis patientez (environ une demi-seconde par personne).") : null,
+        emailsState === "error" ? h("p", { class: "error-text" }, `Échec : ${emailsError}`) : null,
         contacts
           ? [
               h("input", {
@@ -71,14 +96,20 @@ export default {
                 },
               }),
               h("table", { class: "contacts" },
-                h("thead", {}, h("tr", {}, h("th", {}, "Nom"), h("th", {}, "Type"), h("th", {}, "Matières / fonction"))),
+                h("thead", {}, h("tr", {}, h("th", {}, "Nom"), h("th", {}, "Type"), h("th", {}, "Matières / fonction"), h("th", {}, "E-mail"))),
                 h("tbody", {},
                   contacts
                     .filter((c) => !contactsQuery || `${c.name} ${c.subjects} ${c.function} ${c.type}`.toLowerCase().includes(contactsQuery.toLowerCase()))
                     .map((c) => h("tr", {},
                       h("td", {}, c.name, c.principal ? h("span", { class: "tag" }, "prof. principal") : null),
                       h("td", { class: "muted small" }, c.type),
-                      h("td", { class: "small" }, c.subjects || c.function || "")))),
+                      h("td", { class: "small" }, c.subjects || c.function || ""),
+                      h("td", { class: "small contact-email" },
+                        c.email
+                          ? h("a", { href: `mailto:${c.email}` }, c.email)
+                          : c.emailCandidates?.length
+                            ? [h("span", { class: "tag warn" }, "à vérifier"), c.emailCandidates.map((x) => h("div", { class: "muted" }, `${x.name} — `, h("a", { href: `mailto:${x.email}` }, x.email)))]
+                            : h("span", { class: "muted" }, "–"))))),
               ),
             ]
           : h("button", {
@@ -97,6 +128,16 @@ export default {
                 rerender();
               },
             }, contactsState === "loading" ? "Chargement…" : contactsState === "error" ? "Échec — réessayer" : "Afficher l'annuaire"),
+      ),
+
+      h("section", { class: "card wide" },
+        h("h2", {}, "Assistant IA (MCP)"),
+        h("p", { class: "muted small" }, "Permet à un assistant IA (Claude, ou tout client MCP) de lire vos devoirs, emploi du temps, notes, informations… et de cocher des devoirs. Il se connecte à repronote sur cet ordinateur ; rien ne passe par un autre serveur que celui de l'assistant."),
+        h("div", { class: "detail-grid" },
+          h("div", { class: "detail-row" }, h("span", { class: "muted" }, "Adresse MCP"), h("span", { class: "copy-row" }, h("code", {}, `${location.origin}/mcp`), copyBtn(`${location.origin}/mcp`))),
+          h("div", { class: "detail-row" }, h("span", { class: "muted" }, "Claude Code"), h("span", { class: "copy-row" }, h("code", {}, `claude mcp add --transport http repronote ${location.origin}/mcp`), copyBtn(`claude mcp add --transport http repronote ${location.origin}/mcp`))),
+        ),
+        h("p", { class: "muted small" }, "repronote doit être ouvert pendant que l'assistant l'utilise. Outils : get_today, get_timetable, get_homework, set_homework_done, get_grades, get_news, mark_news_read, get_notebook, get_lesson_contents, list_documents, sync_now."),
       ),
 
       h("section", { class: "card wide" },

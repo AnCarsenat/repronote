@@ -1,20 +1,27 @@
 import { h, formatAgo } from "./lib.js";
 import { store, subscribe, refresh, syncNow, relogin, data } from "./state.js";
+import { subscribe as onSettings, orderedViews, isTabHidden, startView } from "./settings.js";
 import home from "./views/home.js";
 import timetable from "./views/timetable.js";
 import homework from "./views/homework.js";
 import grades from "./views/grades.js";
+import simulators from "./views/simulators.js";
 import resources from "./views/resources.js";
 import notebook from "./views/notebook.js";
 import news from "./views/news.js";
 import documents from "./views/documents.js";
 import account from "./views/account.js";
 import stats from "./views/stats.js";
+import settings, { setViews } from "./views/settings.js";
+import welcome from "./views/welcome.js";
 
-const views = [home, timetable, homework, grades, stats, resources, notebook, news, documents, account];
+const views = [home, timetable, homework, grades, stats, simulators, resources, notebook, news, documents, account, settings];
+setViews(() => views);
 const $ = (id) => document.getElementById(id);
 
-const currentView = () => views.find((v) => location.hash === `#/${v.id}`) ?? home;
+// Hidden tabs still open from their URL; no hash = the chosen start page.
+const currentView = () =>
+  views.find((v) => location.hash === `#/${v.id}`) ?? (location.hash.length > 2 ? home : startView(views));
 
 function renderHeader() {
   const user = store.state?.data?.user?.data;
@@ -23,7 +30,7 @@ function renderHeader() {
 
   const view = currentView();
   $("nav").replaceChildren(
-    ...views.map((v) =>
+    ...orderedViews(views).filter((v) => !isTabHidden(v.id) || v === view).map((v) =>
       h("a", { href: `#/${v.id}`, class: v === view ? "active" : "", "aria-current": v === view ? "page" : false }, v.title),
     ),
   );
@@ -36,6 +43,7 @@ function renderHeader() {
     h("span", { class: "muted small" }, `Synchro ${formatAgo(s?.lastSuccessfulSync)}${s?.pending ? ` · ${s.pending} action(s) en attente` : ""}`),
     syncBtn,
     s?.pronoteURL ? h("a", { class: "button secondary small-btn", href: `${s.pronoteURL}/eleve.html`, target: "_blank", rel: "noreferrer", title: "Ouvrir Pronote dans le navigateur" }, "Pronote ↗") : null,
+    h("a", { href: "#/settings", class: `icon-btn settings-link ${view === settings ? "active" : ""}`, title: "Réglages", "aria-label": "Réglages" }, "⚙"),
   );
 }
 
@@ -77,7 +85,9 @@ function renderBanner() {
 }
 
 function renderView() {
-  const view = currentView();
+  // First run (no Pronote address yet): the welcome screen instead of the pages.
+  const firstRun = store.state && !store.state.pronoteURL && !Object.keys(store.state.data ?? {}).length;
+  const view = firstRun ? welcome : currentView();
   document.title = view === home ? "Pronote" : `${view.title} · Pronote`;
   let nodes;
   try {
@@ -99,6 +109,7 @@ function render() {
 }
 
 subscribe(render);
+onSettings(render);
 window.addEventListener("hashchange", () => {
   render();
   window.scrollTo(0, 0);

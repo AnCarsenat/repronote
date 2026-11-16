@@ -144,3 +144,19 @@ export async function fetchHomeworkRange(from, to) {
   const r = await call(`/api/homework/range?from=${iso(from)}&to=${iso(to)}`);
   return { items: r.items ?? [], offline: Boolean(r.offline) };
 }
+
+/** First run: log in with the given Pronote address (opens the login window on the server side). */
+export async function firstLogin(url) {
+  if (store.busy) return;
+  store.busy = "login";
+  emit();
+  try {
+    store.state = await call("/api/login", { method: "POST", body: JSON.stringify({ url }) });
+    store.serverDown = false;
+  } catch {
+    // keep the welcome screen; the caller shows an error
+  } finally {
+    store.busy = null;
+    emit();
+  }
+}

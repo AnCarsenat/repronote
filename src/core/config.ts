@@ -1,7 +1,11 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-export const DATA_DIR = fileURLToPath(new URL("../../data/", import.meta.url));
+/**
+ * Where everything is stored: REPRONOTE_DATA_DIR (the desktop app points it at
+ * the user profile), else ./data in the folder the server is started from.
+ */
+export const DATA_DIR = join(process.env.REPRONOTE_DATA_DIR ?? join(process.cwd(), "data"), "/");
 /** Chromium profile: keeps the ENT/CAS cookies so later logins can be automatic. */
 export const BROWSER_PROFILE_DIR = `${DATA_DIR}browser-profile`;
 const CONFIG_PATH = `${DATA_DIR}config.json`;

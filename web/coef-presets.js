@@ -4,9 +4,10 @@
 //
 // A rule matches the subject name (uppercase, without accents). First match wins.
 
-const normalize = (name) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+export const normalize = (name) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
-const R = {
+// Subject-name regexes, also used by the exam simulators (views/simulators.js).
+export const R = {
   option: /\bOPTION\b|EXPERT|COMPLEMENTAIRE|\bLATIN\b|\bGREC\b|\bLCA\b|DGEMC|\bFACULTATI/,
   spe: /^SPE\b|\bSPE\s*[-–]|SPECIALITE/,
   philo: /PHILO/,
