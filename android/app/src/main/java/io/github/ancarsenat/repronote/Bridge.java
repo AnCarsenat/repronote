@@ -88,6 +88,7 @@ final class Bridge {
             else if (mode.equals("cdp")) cdp(s, in);
             else s.close();
         } catch (Exception e) {
+            Log.w(TAG, "bridge connection failed", e);
             try {
                 s.close();
             } catch (IOException ignored) {}
@@ -109,6 +110,7 @@ final class Bridge {
 
     private void cdp(Socket s, InputStream in) throws IOException {
         LocalSocket devtools = new LocalSocket();
+        Log.i(TAG, "cdp connection");
         devtools.connect(new LocalSocketAddress("webview_devtools_remote_" + android.os.Process.myPid(), LocalSocketAddress.Namespace.ABSTRACT));
         Thread up = pipe(in, devtools.getOutputStream(), () -> closeQuietly(devtools));
         pipe(devtools.getInputStream(), s.getOutputStream(), () -> closeQuietly(s));

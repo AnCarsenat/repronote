@@ -93,6 +93,7 @@ public class MainActivity extends Activity implements Bridge.Handler {
         env.put("REPRONOTE_ACCESS_TOKEN", accessToken);
         env.put("REPRONOTE_BRIDGE_PORT", Integer.toString(bridge.port()));
         env.put("REPRONOTE_BRIDGE_TOKEN", bridgeToken);
+        env.put("REPRONOTE_DEBUG", "1"); // login steps in logcat (tag repronote-node)
         NodeRunner.start(this, env);
     }
 
@@ -191,6 +192,7 @@ public class MainActivity extends Activity implements Bridge.Handler {
 
     @Override
     public void onCommand(JSONObject command) {
+        Log.i(TAG, "bridge command: " + command);
         main.post(() -> {
             String cmd = command.optString("cmd");
             int id = command.optInt("id");
@@ -211,6 +213,7 @@ public class MainActivity extends Activity implements Bridge.Handler {
         wv.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                Log.i(TAG, "login " + id + " page finished: " + url);
                 if (!announced[0]) {
                     announced[0] = true;
                     bridge.emit("opened", id);
