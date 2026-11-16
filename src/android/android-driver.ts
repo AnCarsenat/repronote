@@ -8,7 +8,7 @@ import { CdpSession, Control, listTargets } from "./bridge.ts";
  * like the Electron driver does. Cookies (the ENT session) persist in the
  * app's WebView cookie store.
  */
-const control = new Control();
+export const control = new Control();
 const waiters = new Map<string, () => void>();
 const closeCbsById = new Map<number, Array<() => void>>();
 

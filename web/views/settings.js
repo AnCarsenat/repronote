@@ -1,5 +1,6 @@
 import { h, formatAgo } from "../lib.js";
-import { store, syncNow, saveLayout } from "../state.js";
+import { store, syncNow, saveLayout, saveNotifications, testNotifications } from "../state.js";
+import { browserNotificationsUsable } from "../notifications.js";
 import { defaultLayout } from "../widgets/index.js";
 import {
   getSettings, setSetting, resetSettings, clearLocalData, orderedViews, isTabHidden,
@@ -67,6 +68,7 @@ const ICONS = {
   tabs: "M4 6h16M4 12h16M4 18h10",
   home: "M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z",
   data: "M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+  notifications: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0",
   about: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01",
   chevron: "M9 6l6 6-6 6",
 };
@@ -307,10 +309,106 @@ function about() {
   ];
 }
 
+// ---- Notifications & webhooks (saved on the server) ----
+
+const KINDS = [
+  ["grade", "Nouvelles notes"],
+  ["homework", "Nouveaux devoirs"],
+  ["news", "Nouvelles informations"],
+  ["canceled", "Cours annulés"],
+];
+let notifyMsg = null; // { kind: "ok" | "bad", text }
+let newHook = { url: "", name: "" };
+let rerenderSettings = () => {};
+
+function notificationsCategory() {
+  const st = store.state;
+  if (!st?.notifications) return [h("p", { class: "set-hint" }, "Serveur local injoignable.")];
+  const n = st.notifications;
+  const save = async (change) => {
+    const err = await saveNotifications({ ...n, ...change });
+    notifyMsg = err ? { kind: "bad", text: err } : null;
+    rerenderSettings();
+  };
+  const browser = browserNotificationsUsable();
+  const permission = typeof Notification !== "undefined" ? Notification.permission : "denied";
+  const looksDiscord = (url) => /discord(app)?\.com\/api\/webhooks\//.test(url);
+
+  return [
+    h("div", { class: "set-group" },
+      h("h3", {}, "Me prévenir pour"),
+      KINDS.map(([kind, label]) =>
+        row(label, null, toggle(`set-notify-${kind}`, n.kinds[kind], (v) => save({ kinds: { ...n.kinds, [kind]: v } })), { id: `set-notify-${kind}` })),
+      h("p", { class: "set-hint" }, "Vérifié à chaque synchronisation (toutes les 30 minutes tant que repronote est ouvert)."),
+    ),
+    h("div", { class: "set-group" },
+      h("h3", {}, "Sur cet appareil"),
+      row(st.systemNotifications ? "Notifications du système" : "Notifications du navigateur",
+        st.systemNotifications
+          ? "Affichées par l'application, même quand sa fenêtre est cachée."
+          : "Affichées tant qu'un onglet repronote est ouvert.",
+        toggle("set-notify-system", n.system, (v) => save({ system: v })), { id: "set-notify-system" }),
+      browser && n.system && permission !== "granted"
+        ? row("Autorisation", permission === "denied" ? "Refusée : changez-la dans les réglages du site de votre navigateur." : "Le navigateur doit vous demander la permission.",
+            h("button", { type: "button", class: "small-btn", disabled: permission === "denied", onclick: async () => {
+              await Notification.requestPermission();
+              rerenderSettings();
+            } }, "Autoriser"))
+        : null,
+    ),
+    h("div", { class: "set-group" },
+      h("h3", {}, "Webhooks"),
+      h("p", { class: "set-hint" }, "Envoie chaque nouveauté à une adresse : un salon Discord (Paramètres du salon → Intégrations → Webhooks), ou n'importe quel service qui accepte du JSON (ntfy, Home Assistant, n8n…)."),
+      n.webhooks.map((w, i) =>
+        h("div", { class: "set-row webhook-row" },
+          h("div", { class: "set-label" },
+            h("span", {}, w.name || (w.format === "discord" ? "Discord" : new URL(w.url).hostname)),
+            h("span", { class: "set-hint webhook-url" }, w.url.replace(/\/[^/]{12,}$/, "/…"))),
+          h("div", { class: "set-control" },
+            h("select", { "aria-label": "Format", onchange: (e) => save({ webhooks: n.webhooks.map((x, j) => (j === i ? { ...x, format: e.target.value } : x)) }) },
+              h("option", { value: "discord", selected: w.format === "discord" }, "Discord"),
+              h("option", { value: "json", selected: w.format === "json" }, "JSON")),
+            h("button", { type: "button", class: "secondary small-btn danger", onclick: () => save({ webhooks: n.webhooks.filter((_, j) => j !== i) }) }, "Retirer")))),
+      h("form", { class: "webhook-add", onsubmit: (e) => {
+        e.preventDefault();
+        const url = newHook.url.trim();
+        if (!url) return;
+        save({ webhooks: [...n.webhooks, { id: String(Date.now()), url, name: newHook.name.trim() || undefined, format: looksDiscord(url) ? "discord" : "json" }] });
+        newHook = { url: "", name: "" };
+      } },
+        h("input", { id: "set-hook-url", type: "url", placeholder: "https://discord.com/api/webhooks/…", value: newHook.url, required: true, "aria-label": "Adresse du webhook", oninput: (e) => (newHook.url = e.target.value) }),
+        h("input", { id: "set-hook-name", type: "text", placeholder: "Nom (facultatif)", value: newHook.name, "aria-label": "Nom du webhook", oninput: (e) => (newHook.name = e.target.value) }),
+        h("button", { type: "submit", class: "small-btn" }, "Ajouter")),
+    ),
+    h("div", { class: "set-group" },
+      row("Essayer", "Envoie une notification de test partout (appareil et webhooks).",
+        h("button", { type: "button", class: "secondary small-btn", onclick: async () => {
+          try {
+            const r = await testNotifications();
+            if (browser && n.system && Notification.permission === "granted") new Notification("repronote : test", { body: "Les notifications fonctionnent." });
+            notifyMsg = r.ok ? { kind: "ok", text: "Notification de test envoyée." } : { kind: "bad", text: `Échec : ${r.errors.join(" ; ")}` };
+          } catch {
+            notifyMsg = { kind: "bad", text: "Serveur local injoignable." };
+          }
+          rerenderSettings();
+        } }, "Envoyer un test")),
+      notifyMsg ? h("p", { class: notifyMsg.kind === "ok" ? "set-hint" : "error-text", role: "status" }, notifyMsg.text) : null,
+    ),
+    st.events?.length
+      ? h("div", { class: "set-group" },
+          h("h3", {}, "Dernières notifications"),
+          h("ul", { class: "event-list" },
+            st.events.slice(0, 10).map((e) =>
+              h("li", {}, h("strong", {}, e.title), h("span", { class: "set-hint" }, `${e.body} · ${formatAgo(e.at)}`)))))
+      : null,
+  ];
+}
+
 const CATEGORIES = [
   { id: "appearance", title: "Apparence", hint: "Thème, couleur, texte", render: appearance },
   { id: "tabs", title: "Onglets", hint: "Navigation, page d'ouverture", render: tabs },
   { id: "home", title: "Accueil", hint: "Widgets", render: homeCategory },
+  { id: "notifications", title: "Notifications", hint: "Alertes, webhooks Discord", render: notificationsCategory },
   { id: "data", title: "Synchronisation & données", hint: "Actualiser, exporter, cache", render: dataCategory },
   { id: "about", title: "À propos", hint: "Licence, vie privée", render: about },
 ];
@@ -320,6 +418,7 @@ export default {
   title: "Réglages",
 
   render(_data, rerender) {
+    rerenderSettings = rerender;
     const s = getSettings();
     const select = (id) => {
       open = id;

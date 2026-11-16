@@ -1,11 +1,14 @@
 // Desktop app: the local server runs inside Electron, the UI is a window on it,
 // and Pronote/ENT logins use Electron's own browser windows (no Playwright).
 import { join } from "node:path";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, Notification, shell } from "electron";
 
 // Data goes in the user profile (e.g. ~/.config/repronote/data, %APPDATA%\repronote\data).
 // Must be set before the server module loads: it reads it at import time.
 process.env.REPRONOTE_DATA_DIR ??= join(app.getPath("userData"), "data");
+
+// Windows shows notifications only for apps with this id (the installer's appId).
+if (process.platform === "win32") app.setAppUserModelId("io.github.ancarsenat.repronote");
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -15,6 +18,20 @@ if (!app.requestSingleInstanceLock()) {
 const { setBrowserDriver } = await import("../core/browser-driver.ts");
 const { electronDriver } = await import("./electron-driver.ts");
 setBrowserDriver(electronDriver);
+
+// New grades, homework… as system notifications; clicking one shows the app.
+const { setSystemNotifier } = await import("../notify/notifications.ts");
+setSystemNotifier((e) => {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: e.title, body: e.body });
+  n.on("click", () => {
+    if (!win) return createWindow();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+  n.show();
+});
 
 // Note: with an ES module main file, Electron emits "ready" only once this
 // module has finished evaluating, so don't await app.whenReady() at top level.

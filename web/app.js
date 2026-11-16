@@ -14,6 +14,7 @@ import account from "./views/account.js";
 import stats from "./views/stats.js";
 import settings, { setViews } from "./views/settings.js";
 import welcome from "./views/welcome.js";
+import "./notifications.js";
 
 const views = [home, timetable, homework, grades, stats, simulators, resources, notebook, news, documents, account, settings];
 setViews(() => views);
