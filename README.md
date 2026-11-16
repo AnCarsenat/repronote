@@ -19,6 +19,7 @@ Les versions prêtes à installer sont dans les [Releases](https://github.com/An
 
 | Fichier | Pour |
 |---|---|
+| `installer-linux.sh` | Linux, installateur pour toute destros |
 | `repronote-…-win-x64.exe` | Windows (installateur ; non signé : cliquez « Informations complémentaires » puis « Exécuter quand même ») |
 | `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (rendre exécutable puis lancer ; pas besoin de `fuse2`/`libfuse2`) |
 | `repronote-…-linux-x64.tar.gz` | Linux sans AppImage : extraire puis lancer `./repronote` |
