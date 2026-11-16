@@ -100,6 +100,16 @@ export default {
       ),
 
       h("section", { class: "card wide" },
+        h("h2", {}, "Assistant IA (MCP)"),
+        h("p", { class: "muted small" }, "Permet à un assistant IA (Claude, ou tout client MCP) de lire vos devoirs, emploi du temps, notes, informations… et de cocher des devoirs. Il se connecte à repronote sur cet ordinateur ; rien ne passe par un autre serveur que celui de l'assistant."),
+        h("div", { class: "detail-grid" },
+          h("div", { class: "detail-row" }, h("span", { class: "muted" }, "Adresse MCP"), h("span", { class: "copy-row" }, h("code", {}, `${location.origin}/mcp`), copyBtn(`${location.origin}/mcp`))),
+          h("div", { class: "detail-row" }, h("span", { class: "muted" }, "Claude Code"), h("span", { class: "copy-row" }, h("code", {}, `claude mcp add --transport http repronote ${location.origin}/mcp`), copyBtn(`claude mcp add --transport http repronote ${location.origin}/mcp`))),
+        ),
+        h("p", { class: "muted small" }, "repronote doit être ouvert pendant que l'assistant l'utilise. Outils : get_today, get_timetable, get_homework, set_homework_done, get_grades, get_news, mark_news_read, get_notebook, get_lesson_contents, list_documents, sync_now."),
+      ),
+
+      h("section", { class: "card wide" },
         h("h2", {}, "Données enregistrées sur cet ordinateur"),
         h("p", { class: "muted small" }, `Dernière synchronisation réussie ${formatAgo(store.state?.lastSuccessfulSync)}. Tout est gardé dans le dossier data/ du projet, utilisable hors ligne.`),
         h("table", { class: "kinds" },

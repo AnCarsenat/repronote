@@ -13,6 +13,7 @@ import documents from "./views/documents.js";
 import account from "./views/account.js";
 import stats from "./views/stats.js";
 import settings, { setViews } from "./views/settings.js";
+import welcome from "./views/welcome.js";
 
 const views = [home, timetable, homework, grades, stats, simulators, resources, notebook, news, documents, account, settings];
 setViews(() => views);
@@ -84,7 +85,9 @@ function renderBanner() {
 }
 
 function renderView() {
-  const view = currentView();
+  // First run (no Pronote address yet): the welcome screen instead of the pages.
+  const firstRun = store.state && !store.state.pronoteURL && !Object.keys(store.state.data ?? {}).length;
+  const view = firstRun ? welcome : currentView();
   document.title = view === home ? "Pronote" : `${view.title} · Pronote`;
   let nodes;
   try {

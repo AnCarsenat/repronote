@@ -13,7 +13,20 @@ Une interface alternative pour **Pronote**, qui tourne sur votre ordinateur.
 
 *English: an alternative, offline-first Pronote frontend with a local HTTP API. Login goes through your school's ENT in a real browser; the live session is handed to [pawnote](https://github.com/BlocksHub/Pawnote-LTS). UI in French.*
 
-## Installation
+## Télécharger
+
+Les versions prêtes à installer sont dans les [Releases](https://github.com/AnCarsenat/repronote/releases) :
+
+| Fichier | Pour |
+|---|---|
+| `repronote-…-win-x64.exe` | Windows (installateur ; non signé : cliquez « Informations complémentaires » puis « Exécuter quand même ») |
+| `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (rendre exécutable puis lancer) |
+| `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
+| `repronote-server-….zip` | Le serveur seul (Node ≥ 24 + Chromium), pour un serveur ou un Raspberry Pi |
+
+Au premier lancement, collez l'adresse Pronote de votre établissement : une fenêtre s'ouvre pour vous connecter (ENT ou Pronote). Android viendra plus tard.
+
+## Depuis les sources
 
 Prérequis : **Node.js ≥ 24** et **Chromium** (ou Chrome).
 
@@ -36,6 +49,9 @@ npm run serve
 
 # Ou en ligne de commande :
 npm run homework
+
+# L'application de bureau (Electron), depuis les sources :
+npm run desktop
 ```
 
 Les connexions suivantes se font **en arrière-plan** tant que la session ENT est valide (cookies gardés dans un profil Chromium dédié). Quand l'ENT redemande le mot de passe, la fenêtre se rouvre (le mot de passe enregistré par Chromium est validé automatiquement).
@@ -86,6 +102,18 @@ curl -s localhost:4173/api/state | jq '.data.homework.data[] | {matiere: .subjec
 
 Les données suivent les types de [pawnote](https://github.com/BlocksHub/Pawnote-LTS) (dates en ISO).
 
+## Assistant IA (MCP)
+
+repronote expose ses données à un assistant IA via le [Model Context Protocol](https://modelcontextprotocol.io) : devoirs, emploi du temps, notes, informations, carnet, documents, et cocher un devoir ou marquer une information comme lue.
+
+- **Clients HTTP** (Claude Code…) : `claude mcp add --transport http repronote http://127.0.0.1:4173/mcp`
+- **Clients qui lancent une commande** (Claude Desktop…) : `npm run mcp` (ou `node dist/mcp.mjs` dans le paquet serveur), avec repronote lancé à côté. Exemple de configuration :
+  ```json
+  { "mcpServers": { "repronote": { "command": "node", "args": ["/chemin/vers/repronote/dist/mcp.mjs"] } } }
+  ```
+
+Outils : `get_today`, `get_timetable`, `get_homework`, `set_homework_done`, `get_grades`, `get_news`, `mark_news_read`, `get_notebook`, `get_lesson_contents`, `list_documents`, `sync_now`.
+
 ## Écrire un widget
 
 Un widget est un module dans `web/widgets/`, à ajouter dans `web/widgets/index.js` :
@@ -115,6 +143,8 @@ Il apparaît dans « + Ajouter un widget », avec ses réglages dans la roue ⚙
 ```
 src/
   core/        connexion (navigateur, reprise de session), requêtes Pronote brutes
+  electron/    application de bureau
+  mcp/         serveur MCP (outils pour assistants IA)
   store/       base SQLite, synchronisation, cache de fichiers
   server.ts    serveur HTTP + API
   cli/         npm run login / homework
@@ -124,6 +154,19 @@ web/
 ```
 
 `npm run typecheck` vérifie les types (Node exécute le TypeScript directement).
+
+### Construire
+
+| Commande | Produit |
+|---|---|
+| `npm run build` | `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs` (esbuild) |
+| `npm run dist:linux` | AppImage + .deb dans `release/` |
+| `npm run dist:win` | installateur Windows (sur Windows) |
+| `npm run dist:server` | `release/repronote-server/` |
+
+Le workflow GitHub `.github/workflows/build.yml` construit tout à chaque push ; un tag `v1.2.3` publie une Release avec les fichiers.
+
+L'application de bureau lance le serveur dans Electron et utilise ses propres fenêtres pour la connexion (pas de Playwright) ; ses données sont dans le profil utilisateur (`~/.config/repronote/data`, `%APPDATA%\repronote\data`).
 
 ## Licence
 

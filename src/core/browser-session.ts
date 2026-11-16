@@ -1,6 +1,5 @@
 import { createCipheriv, createHash } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import { chromium, type BrowserContext, type Page } from "playwright-core";
+import { getBrowserDriver, type DriverPage } from "./browser-driver.ts";
 import * as pronote from "@blockshub/pawnote-lts";
 import { BROWSER_PROFILE_DIR } from "./config.ts";
 import { decodeInstanceParameters } from "./instance-parameters.ts";
@@ -65,27 +64,20 @@ type FrozenCommunication = {
 export async function openBrowserSession(options: Options): Promise<pronote.SessionHandle> {
   const base = pronote.cleanURL(options.url);
   const kind = options.kind ?? pronote.AccountKind.STUDENT;
+  const driver = await getBrowserDriver();
 
-  await mkdir(BROWSER_PROFILE_DIR, { recursive: true, mode: 0o700 });
-  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, {
-    headless: !options.interactive,
-    executablePath: process.env.CHROMIUM_PATH ?? "/usr/bin/chromium",
-    viewport: options.interactive ? null : { width: 420, height: 900 },
-  });
-
-  try {
-    // The school server sometimes drops a script download; Pronote's page
-    // then logs itself out ("Échec lors du chargement de la page"). Retry.
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await attemptSession(context, base, kind, options.interactive);
-      } catch (err) {
-        if (!(err instanceof PageStartFailed) || attempt >= MAX_ATTEMPTS) throw err;
-        console.error(`Pronote page failed to start (attempt ${attempt}/${MAX_ATTEMPTS}), retrying...`);
-      }
+  // The school server sometimes drops a script download; Pronote's page
+  // then logs itself out ("Échec lors du chargement de la page"). Retry.
+  for (let attempt = 1; ; attempt++) {
+    const page = await driver.openPage({ interactive: options.interactive, profileDir: BROWSER_PROFILE_DIR });
+    try {
+      return await attemptSession(page, base, kind, options.interactive);
+    } catch (err) {
+      if (!(err instanceof PageStartFailed) || attempt >= MAX_ATTEMPTS) throw err;
+      console.error(`Pronote page failed to start (attempt ${attempt}/${MAX_ATTEMPTS}), retrying...`);
+    } finally {
+      await page.close().catch(() => {});
     }
-  } finally {
-    await closeQuietly(context);
   }
 }
 
@@ -97,23 +89,24 @@ class PageStartFailed extends Error {
 }
 
 async function attemptSession(
-  context: BrowserContext,
+  page: DriverPage,
   base: string,
   kind: pronote.AccountKind,
   interactive: boolean,
 ): Promise<pronote.SessionHandle> {
-  const page = await context.newPage();
-  for (const other of context.pages()) if (other !== page) await other.close().catch(() => {});
   const captured = watchPronoteTraffic(page);
+  const step = (msg: string) => process.env.REPRONOTE_DEBUG && console.log(`[login] ${msg}`);
+  step("page opened");
 
   // Look like a fresh browser to Pronote (its storage holds a navigator id
   // tied to earlier sessions). ENT cookies live on another origin and stay.
-  const cdp = await context.newCDPSession(page);
-  await cdp.send("Storage.clearDataForOrigin", { origin: new URL(base).origin, storageTypes: "all" });
-  await cdp.detach();
+  await page.clearOriginData(new URL(base).origin);
 
+  step("storage cleared");
   await page.goto(`${base}/${SPACE_PAGE[kind]}?fd=1`);
+  step(`navigated: ${page.url()}`);
   await waitUntilReady(page, captured, interactive);
+  step(`ready (${captured.trace.length} Pronote calls)`);
 
   // News texts: Pronote 2026 rejects our own detail request, but its page can
   // fetch them. Only items not seen before. Must run before the freeze.
@@ -126,7 +119,7 @@ async function attemptSession(
   }
 
   const frozen = await freezeWithRetry(page).catch(async (err) => {
-    await page.screenshot({ path: `${BROWSER_PROFILE_DIR}/../last-error.png`, fullPage: true }).catch(() => {});
+    await page.screenshot(`${BROWSER_PROFILE_DIR}/../last-error.png`).catch(() => {});
     const message = `${err instanceof Error ? err.message : err}\nPronote traffic: ${captured.trace.join(" | ")}`;
     throw new PageStartFailed(message);
   });
@@ -137,12 +130,12 @@ async function attemptSession(
   return toPawnoteSession(base, kind, captured, frozen);
 }
 
-function watchPronoteTraffic(page: Page): Captured {
+function watchPronoteTraffic(page: DriverPage): Captured {
   const captured: Captured = { userLoaded: false, pending: 0, lastActivity: Date.now(), trace: [] };
   const isApi = (url: string) => url.includes("/appelfonction/");
 
-  page.on("request", (req) => {
-    if (isApi(req.url())) {
+  page.onRequest((url) => {
+    if (isApi(url)) {
       captured.pending++;
       captured.lastActivity = Date.now();
     }
@@ -153,20 +146,20 @@ function watchPronoteTraffic(page: Page): Captured {
       captured.lastActivity = Date.now();
     }
   };
-  page.on("requestfailed", (req) => {
-    captured.trace.push(`FAILED ${new URL(req.url()).pathname.split("/").slice(-3).join("/")} ${req.failure()?.errorText}`);
-    done(req.url());
+  page.onRequestFailed((url, error) => {
+    captured.trace.push(`FAILED ${url ? new URL(url).pathname.split("/").slice(-3).join("/") : "?"} ${error}`);
+    done(url);
   });
 
-  page.on("response", async (res) => {
-    const url = res.url();
+  page.onResponse(async (res) => {
+    const url = res.url;
     try {
-      if (res.request().resourceType() === "document" && url.includes(".html")) {
+      if (res.isDocument && url.includes(".html")) {
         const match = (await res.text()).match(/Start\s*\(\s*(\{[^}]*\})/);
         if (match) captured.start = JSON.parse(match[1]);
       } else if (isApi(url)) {
         const body = JSON.parse(await res.text());
-        captured.trace.push(`${body.id ?? body.nom ?? "?"} ${res.status()}${body.Erreur ? ` Erreur=${JSON.stringify(body.Erreur).slice(0, 150)}` : ""}`);
+        captured.trace.push(`${body.id ?? body.nom ?? "?"} ${res.status}${body.Erreur ? ` Erreur=${JSON.stringify(body.Erreur).slice(0, 150)}` : ""}`);
         const data = body.dataSec ?? body.donneesSec;
         if (typeof data === "string") {
           throw new Error("This Pronote server encrypts its traffic; not supported yet.");
@@ -190,45 +183,25 @@ function watchPronoteTraffic(page: Page): Captured {
   return captured;
 }
 
-async function waitUntilReady(page: Page, captured: Captured, interactive: boolean): Promise<void> {
+async function waitUntilReady(page: DriverPage, captured: Captured, interactive: boolean): Promise<void> {
   const deadline = Date.now() + (interactive ? INTERACTIVE_TIMEOUT_MS : AUTO_LOGIN_TIMEOUT_MS);
   let closed = false;
-  page.on("close", () => (closed = true));
-
-  const submittedOn = new Set<string>();
+  page.onClose(() => (closed = true));
 
   while (Date.now() < deadline) {
     if (closed) throw new Error("Browser window closed before login finished.");
     if (captured.userLoaded && captured.pending === 0 && Date.now() - captured.lastActivity > IDLE_MS) {
       return;
     }
-    await submitAutofilledLogin(page, submittedOn).catch(() => {});
+    await page.submitAutofilledLogin().catch(() => {});
     await new Promise((r) => setTimeout(r, 250));
   }
   if (!interactive) throw new InteractiveLoginRequired();
   throw new Error("Timed out waiting for login.");
 }
 
-/**
- * On the ENT login page, Chromium fills in the saved username/password but
- * nothing submits. If the password field is autofilled, press Enter in it
- * (once per page URL, so a wrong saved password can't loop).
- * Chromium hides autofilled values from page JS until a real interaction,
- * which is why we use the `:-webkit-autofill` pseudo-class and a real key press.
- */
-async function submitAutofilledLogin(page: Page, submittedOn: Set<string>): Promise<void> {
-  const url = page.url();
-  if (url.includes("index-education.net") || submittedOn.has(url)) return;
-
-  const password = page.locator("input[type=password]:-webkit-autofill").first();
-  if ((await password.count()) === 0 || !(await password.isVisible())) return;
-
-  submittedOn.add(url);
-  await password.press("Enter");
-}
-
 /** The page may still be navigating or initialising: retry for a few seconds. */
-async function freezeWithRetry(page: Page): Promise<FrozenCommunication> {
+async function freezeWithRetry(page: DriverPage): Promise<FrozenCommunication> {
   const deadline = Date.now() + 10_000;
   for (;;) {
     try {
@@ -352,10 +325,6 @@ async function toPawnoteSession(
   session.user = decodeUserParameters(captured.userParameters, session);
   pronote.use(session, 0);
   return session;
-}
-
-async function closeQuietly(context: BrowserContext): Promise<void> {
-  await context.close().catch(() => {});
 }
 
 /**

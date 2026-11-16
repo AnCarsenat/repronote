@@ -13,6 +13,8 @@ import { LiveSession } from "./core/live-session.ts";
 import { Store, type SyncStatus } from "./store/store.ts";
 import { applyPendingToSnapshot, archiveHomework, homeworkKey, syncAll } from "./store/sync.ts";
 import { newsKey } from "./core/browser-session.ts";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpServer } from "./mcp/tools.ts";
 
 const PORT = Number(process.env.PORT ?? 4173);
 // Localhost only by default: the data is personal. HOST=0.0.0.0 exposes it on your network.
@@ -37,6 +39,7 @@ const API_INDEX = {
     { method: "POST", path: "/api/news/read", body: "{ key, read: boolean }", description: "Mark an information as read/unread in Pronote." },
     { method: "GET", path: "/api/contacts", description: "Everyone you can message in Pronote (teachers, staff...). /api/contacts.csv for a spreadsheet." },
     { method: "GET", path: "/api/export", description: "All data as one JSON file." },
+    { method: "POST", path: "/mcp", description: "MCP endpoint (Streamable HTTP) for AI assistants: homework, timetable, grades, news, notebook, documents tools." },
   ],
 };
 const SYNC_EVERY_MS = 30 * 60_000;
@@ -60,11 +63,11 @@ function classify(err: unknown): SyncStatus {
   return { at: Date.now(), ok: false, errorKind: "error", message };
 }
 
-function sync(interactive = false): Promise<SyncStatus> {
+function sync(interactive = false, url?: string): Promise<SyncStatus> {
   syncing ??= (async () => {
     let status: SyncStatus;
     try {
-      const failures = await live.use((session) => syncAll(session, store), { interactive });
+      const failures = await live.use((session) => syncAll(session, store), { interactive, url });
       // Optional kinds (documents, report cards...) may legitimately fail; keep
       // their errors for the UI without turning the whole sync red.
       store.put("syncWarnings", failures);
@@ -167,10 +170,52 @@ const state = () => ({
   data: store.all(),
 });
 
+/**
+ * Websites open in the user's browser can send requests to localhost.
+ * - DNS rebinding: a site's domain re-pointed at 127.0.0.1 could read the API.
+ *   When bound to localhost, only accept Host headers naming localhost.
+ * - CSRF: a site could POST "simple" requests (no CORS preflight). Reject
+ *   state-changing requests whose Origin isn't this server.
+ */
+function allowedRequest(req: IncomingMessage): boolean {
+  const host = req.headers.host ?? "";
+  const local = HOST === "127.0.0.1" || HOST === "localhost";
+  if (local && !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host)) return false;
+  const origin = req.headers.origin;
+  if (req.method !== "GET" && req.method !== "HEAD" && origin && origin !== "null") {
+    try {
+      if (new URL(origin).host !== host) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** MCP over HTTP (stateless): AI assistants connect to http://127.0.0.1:<port>/mcp. */
+async function handleMcp(req: IncomingMessage, res: ServerResponse) {
+  const mcp = createMcpServer(selfURL);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on("close", () => {
+    transport.close();
+    mcp.close();
+  });
+  await mcp.connect(transport);
+  const body = req.method === "POST" ? await readJson(req) : undefined;
+  await transport.handleRequest(req, res, body);
+}
+
+let selfURL = `http://127.0.0.1:${PORT}`;
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const q = (k: string) => url.searchParams.get(k) ?? "";
+  if (!allowedRequest(req)) {
+    res.writeHead(403, { "Content-Type": "text/plain" });
+    return res.end("Forbidden");
+  }
   try {
+    if (url.pathname === "/mcp") return await handleMcp(req, res);
     if (url.pathname === "/api" && req.method === "GET") return json(res, API_INDEX);
     if (url.pathname === "/api/state" && req.method === "GET") return json(res, state());
     if (url.pathname === "/api/sync" && req.method === "POST") {
@@ -178,7 +223,10 @@ const server = createServer(async (req, res) => {
       return json(res, state());
     }
     if (url.pathname === "/api/login" && req.method === "POST") {
-      await sync(true);
+      // First run: the UI sends the Pronote address.
+      const { url: pronote } = await readJson(req).catch(() => ({}));
+      if (pronote && !/^https:\/\/[^/]+\/pronote/i.test(pronote)) return json(res, { error: "Adresse Pronote invalide" }, 400);
+      await sync(true, pronote || undefined);
       return json(res, state());
     }
     const done = url.pathname.match(/^\/api\/homework\/([^/]+)\/done$/);
@@ -346,19 +394,31 @@ const server = createServer(async (req, res) => {
 });
 
 // Localhost only: the data is personal.
-server.listen(PORT, HOST, () => {
-  if (HOST !== "127.0.0.1" && HOST !== "localhost") {
-    console.warn(`⚠ Listening on ${HOST}: anyone on your network can read your Pronote data and act as you.`);
-  }
-  console.log(`Pronote UI: http://localhost:${PORT}`);
-  sync();
-  setInterval(() => sync(), SYNC_EVERY_MS);
-});
-
-// Log out of Pronote on Ctrl+C so the next start isn't refused.
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, async () => {
-    await live.reset();
-    process.exit(0);
+/**
+ * Starts the HTTP server (and background sync). Used by `npm run serve`
+ * (src/serve.ts) and by the desktop app. Port 0 picks a free port.
+ */
+export function startServer({ port = PORT, host = HOST } = {}): Promise<{ port: number; stop(): Promise<void> }> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, () => {
+      const actual = (server.address() as import("node:net").AddressInfo).port;
+      selfURL = `http://127.0.0.1:${actual}`;
+      if (host !== "127.0.0.1" && host !== "localhost") {
+        console.warn(`⚠ Listening on ${host}: anyone on your network can read your Pronote data and act as you.`);
+      }
+      console.log(`Pronote UI: http://localhost:${actual}`);
+      if (pronoteURL) sync(); // nothing to sync before the first login
+      const timer = setInterval(() => pronoteURL && sync(), SYNC_EVERY_MS);
+      resolve({
+        port: actual,
+        // Log out of Pronote so the next start isn't refused.
+        async stop() {
+          clearInterval(timer);
+          await live.reset();
+          server.close();
+        },
+      });
+    });
   });
 }

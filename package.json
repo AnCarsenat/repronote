@@ -4,26 +4,80 @@
   "private": true,
   "description": "Interface alternative pour Pronote : hors ligne, widgets, API locale. Connexion via l'ENT dans un vrai navigateur.",
   "license": "GPL-3.0-or-later",
+  "author": {
+    "name": "AnCarsenat"
+  },
+  "homepage": "https://github.com/AnCarsenat/repronote",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AnCarsenat/repronote.git"
   },
   "type": "module",
+  "main": "dist/electron-main.mjs",
+  "desktopName": "repronote.desktop",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
+    "serve": "node src/serve.ts",
+    "login": "node src/cli/login.ts",
     "homework": "node src/cli/homework.ts",
     "typecheck": "tsc --noEmit",
-    "login": "node src/cli/login.ts",
-    "serve": "node src/server.ts"
+    "build": "node scripts/build.mjs",
+    "desktop": "node scripts/build.mjs && electron .",
+    "dist:linux": "node scripts/build.mjs && electron-builder --linux --publish never",
+    "dist:win": "node scripts/build.mjs && electron-builder --win --publish never",
+    "dist:server": "node scripts/build.mjs && node scripts/package-server.mjs",
+    "mcp": "node src/mcp/stdio.ts"
   },
   "dependencies": {
     "@blockshub/pawnote-lts": "^1.6.4",
-    "playwright-core": "^1.65.1"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "playwright-core": "^1.65.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "io.github.ancarsenat.repronote",
+    "productName": "repronote",
+    "copyright": "GPL-3.0-or-later",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/electron-main.mjs",
+      "web/**/*",
+      "package.json",
+      "!node_modules/**"
+    ],
+    "icon": "build/icon.png",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Education",
+      "maintainer": "AnCarsenat",
+      "synopsis": "Interface alternative pour Pronote",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   }
 }
