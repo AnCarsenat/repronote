@@ -60,7 +60,9 @@ async function openPage({ interactive }: { interactive: boolean }): Promise<Driv
     const title = `repronote-login-${id}`;
     let targetId: string | undefined;
     for (let i = 0; i < 50 && !targetId; i++) {
-      targetId = (await listTargets()).find((t) => t.title === title)?.id;
+      const targets = await listTargets();
+      if (i === 0) console.log(`[android-driver] targets: ${targets.map((t) => `${t.type} "${t.title}"`).join(", ")}`);
+      targetId = targets.find((t) => t.title === title)?.id;
       if (!targetId) await sleep(100);
     }
     console.log(`[android-driver] target ${title}: ${targetId ?? "not found"}`);

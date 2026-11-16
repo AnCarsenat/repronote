@@ -117,24 +117,30 @@ final class Bridge {
         LocalSocket devtools = new LocalSocket();
         Log.i(TAG, "cdp connection");
         devtools.connect(new LocalSocketAddress("webview_devtools_remote_" + android.os.Process.myPid(), LocalSocketAddress.Namespace.ABSTRACT));
-        Thread up = pipe(in, devtools.getOutputStream(), () -> closeQuietly(devtools));
-        pipe(devtools.getInputStream(), s.getOutputStream(), () -> closeQuietly(s));
+        Log.i(TAG, "cdp connected to devtools");
+        Thread up = pipe("node->devtools", in, devtools.getOutputStream(), () -> closeQuietly(devtools));
+        pipe("devtools->node", devtools.getInputStream(), s.getOutputStream(), () -> closeQuietly(s));
         try {
             up.join();
         } catch (InterruptedException ignored) {}
     }
 
-    private static Thread pipe(InputStream from, OutputStream to, Runnable onEnd) {
+    private static Thread pipe(String name, InputStream from, OutputStream to, Runnable onEnd) {
         Thread t = new Thread(() -> {
             byte[] buf = new byte[64 * 1024];
             int n;
+            long total = 0;
             try {
                 while ((n = from.read(buf)) > 0) {
+                    if (total == 0) Log.i(TAG, name + " first bytes: " + new String(buf, 0, Math.min(n, 120), StandardCharsets.ISO_8859_1).replace("\r\n", " | "));
+                    total += n;
                     to.write(buf, 0, n);
                     to.flush();
                 }
-            } catch (IOException ignored) {
+            } catch (IOException e) {
+                Log.i(TAG, name + " error: " + e);
             } finally {
+                Log.i(TAG, name + " ended after " + total + " bytes");
                 onEnd.run();
             }
         }, "bridge-pipe");

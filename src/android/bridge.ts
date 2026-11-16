@@ -55,9 +55,14 @@ export async function listTargets(): Promise<CdpTarget[]> {
   const socket = await open("cdp");
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`DevTools target list timed out (got: ${Buffer.concat(chunks).toString("utf8").slice(0, 200) || "nothing"})`));
+    }, 5000);
     socket.on("data", (c: Buffer) => chunks.push(c));
     socket.on("error", reject);
     socket.on("close", () => {
+      clearTimeout(timer);
       const raw = Buffer.concat(chunks).toString("utf8");
       const body = raw.slice(raw.indexOf("\r\n\r\n") + 4);
       try {
