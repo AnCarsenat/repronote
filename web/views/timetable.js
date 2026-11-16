@@ -6,7 +6,16 @@ const PX_PER_MIN = 1.05;
 const MIN_GAP_LABEL = 50; // minutes
 
 let weekStart = null; // Monday of the week shown
-let phoneDay = null; // day index shown on phones
+let phoneDay = null; // first day index shown on phones
+// Phones show 1, 3 or 5 days side by side (remembered on this device).
+const SPAN_KEY = "repronote:tt-phone-days";
+let phoneSpan = (() => {
+  try {
+    return [1, 3, 5].includes(Number(localStorage.getItem(SPAN_KEY))) ? Number(localStorage.getItem(SPAN_KEY)) : 3;
+  } catch {
+    return 3;
+  }
+})();
 
 const minutesOfDay = (d) => d.getHours() * 60 + d.getMinutes();
 
@@ -116,6 +125,16 @@ export default {
       (hd) => new Date(hd.startDate) < weekEnd && new Date(hd.endDate).getTime() + DAY > weekStart.getTime(),
     );
     phoneDay ??= Math.max(0, days.findIndex((d) => sameDay(d, now)));
+    const span = Math.min(phoneSpan, days.length);
+    const windowStart = Math.max(0, Math.min(phoneDay, days.length - span));
+    const inWindow = (i) => i >= windowStart && i < windowStart + span;
+    const shift = (n) => {
+      const next = Math.max(0, Math.min(windowStart + n, days.length - span));
+      if (next !== windowStart) {
+        phoneDay = next;
+        rerender();
+      } else go(n > 0 ? 7 : -7);
+    };
 
     const nav = h("div", { class: "view-toolbar" },
       h("button", { type: "button", class: "secondary small-btn", disabled: first && weekStart <= first, onclick: () => go(-7) }, "←"),
@@ -145,23 +164,51 @@ export default {
         : null;
 
     const dayTabs = h("div", { class: "tt-daytabs" },
-      days.map((d, i) =>
-        h("button", { type: "button", class: `chip ${i === phoneDay ? "active" : ""}`, onclick: () => ((phoneDay = i), rerender()) },
-          d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })),
-      ),
+      h("div", { class: "tt-daychips" },
+        days.map((d, i) =>
+          h("button", { type: "button", class: `chip ${inWindow(i) ? "active" : ""}`, onclick: () => ((phoneDay = i), rerender()) },
+            d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })),
+        ))
     );
 
+    const spanControl =
+      h("div", { class: "segmented tt-span", role: "group", "aria-label": "Jours affichés" },
+        [1, 3, 5].map((n) =>
+          h("button", { type: "button", class: `seg ${n === phoneSpan ? "on" : ""}`, "aria-pressed": String(n === phoneSpan), onclick: () => {
+            phoneSpan = n;
+            try {
+              localStorage.setItem(SPAN_KEY, String(n));
+            } catch {}
+            rerender();
+          } }, `${n} j`)));
+
+    // Swipe left/right on phones: next/previous days (then weeks).
+    let touch = null;
+    const swipe = {
+      ontouchstart: (e) => (touch = { x: e.touches[0].clientX, y: e.touches[0].clientY }),
+      ontouchend: (e) => {
+        if (!touch) return;
+        const dx = e.changedTouches[0].clientX - touch.x;
+        const dy = e.changedTouches[0].clientY - touch.y;
+        touch = null;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) shift(dx < 0 ? span : -span);
+      },
+    };
+
+    nav.append(spanControl);
     return [
       nav,
       holiday ? h("p", { class: "banner info" }, `Vacances / férié : ${holiday.name}`) : null,
       dayTabs,
-      h("div", { class: "tt", style: { "--days": String(days.length), "--tt-height": `${heightPx}px`, "--hour-px": `${60 * PX_PER_MIN}px` } },
+      h("div", { class: `tt ${span > 1 ? "phone-multi" : ""}`, ...swipe, style: { "--days": String(days.length), "--phone-days": String(span), "--tt-height": `${heightPx}px`, "--hour-px": `${60 * PX_PER_MIN}px` } },
         h("div", { class: "tt-axis" }, h("div", { class: "tt-head" }), h("div", { class: "tt-body" }, hours)),
         days.map((day, i) => {
           const items = ofWeek.filter((c) => sameDay(c.startDate, day));
           const isToday = sameDay(day, now);
-          return h("div", { class: `tt-col ${isToday ? "today" : ""} ${i === phoneDay ? "phone-shown" : ""}` },
-            h("div", { class: "tt-head" }, day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" })),
+          return h("div", { class: `tt-col ${isToday ? "today" : ""} ${inWindow(i) ? "phone-shown" : ""}` },
+            h("div", { class: "tt-head" },
+              h("span", { class: "tt-head-long" }, day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" })),
+              h("span", { class: "tt-head-short" }, day.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }))),
             h("div", { class: "tt-body" },
               gapLabels(items, startMin),
               withLanes(items).map((o) => classBlock(o, startMin, now)),
