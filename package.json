@@ -1,0 +1,22 @@
+{
+  "name": "pronote",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "homework": "node src/cli/homework.ts",
+    "typecheck": "tsc --noEmit",
+    "login": "node src/cli/login.ts"
+  },
+  "keywords": [],
+  "type": "module",
+  "dependencies": {
+    "@blockshub/pawnote-lts": "^1.6.4",
+    "playwright-core": "^1.65.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
