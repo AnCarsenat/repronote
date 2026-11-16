@@ -4,13 +4,14 @@ import home from "./views/home.js";
 import timetable from "./views/timetable.js";
 import homework from "./views/homework.js";
 import grades from "./views/grades.js";
+import simulators from "./views/simulators.js";
 import resources from "./views/resources.js";
 import notebook from "./views/notebook.js";
 import news from "./views/news.js";
 import documents from "./views/documents.js";
 import account from "./views/account.js";
 
-const views = [home, timetable, homework, grades, resources, notebook, news, documents, account];
+const views = [home, timetable, homework, grades, simulators, resources, notebook, news, documents, account];
 const $ = (id) => document.getElementById(id);
 
 const currentView = () => views.find((v) => location.hash === `#/${v.id}`) ?? home;
