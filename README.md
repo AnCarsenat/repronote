@@ -20,7 +20,8 @@ Les versions prêtes à installer sont dans les [Releases](https://github.com/An
 | Fichier | Pour |
 |---|---|
 | `repronote-…-win-x64.exe` | Windows (installateur ; non signé : cliquez « Informations complémentaires » puis « Exécuter quand même ») |
-| `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (rendre exécutable puis lancer) |
+| `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (rendre exécutable puis lancer ; pas besoin de `fuse2`/`libfuse2`) |
+| `repronote-…-linux-x64.tar.gz` | Linux sans AppImage : extraire puis lancer `./repronote` |
 | `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
 | `repronote-…-android-arm64-v8a.apk` | Android 7+ (presque tous les téléphones ; `armeabi-v7a` pour les très anciens, `x86_64` pour les émulateurs). Autorisez l'installation depuis cette source. |
 | `repronote-server-….zip` | Le serveur seul (Node ≥ 24 + Chromium), pour un serveur ou un Raspberry Pi |
@@ -162,7 +163,7 @@ web/
 | Commande | Produit |
 |---|---|
 | `npm run build` | `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs`, `dist/android.mjs` (esbuild) |
-| `npm run dist:linux` | AppImage + .deb dans `release/` |
+| `npm run dist:linux` | AppImage + .deb + .tar.gz dans `release/` |
 | `npm run dist:win` | installateur Windows (sur Windows) |
 | `npm run dist:server` | `release/repronote-server/` |
 | `npm run dist:android` | APK Android (un par architecture) dans `android/app/build/outputs/apk/release/` — demande le SDK Android (avec NDK et CMake) et Java 17+ |
