@@ -38,13 +38,13 @@ function renderHeader() {
   const s = store.state;
   const syncBtn = h("button", { type: "button", class: "secondary small-btn", disabled: Boolean(store.busy), onclick: syncNow },
     store.busy === "sync" || s?.syncing ? "Synchronisation…" : "Actualiser");
-  $("status").replaceChildren(
+  $("status").replaceChildren(...[
     h("span", { class: `dot ${s?.lastSync?.ok === false || store.serverDown ? "bad" : "ok"}` }),
     h("span", { class: "muted small" }, `Synchro ${formatAgo(s?.lastSuccessfulSync)}${s?.pending ? ` · ${s.pending} action(s) en attente` : ""}`),
     syncBtn,
     s?.pronoteURL ? h("a", { class: "button secondary small-btn", href: `${s.pronoteURL}/eleve.html`, target: "_blank", rel: "noreferrer", title: "Ouvrir Pronote dans le navigateur" }, "Pronote ↗") : null,
     h("a", { href: "#/settings", class: `icon-btn settings-link ${view === settings ? "active" : ""}`, title: "Réglages", "aria-label": "Réglages" }, "⚙"),
-  );
+  ].filter(Boolean));
 }
 
 function renderBanner() {
