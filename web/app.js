@@ -5,6 +5,7 @@ import home from "./views/home.js";
 import timetable from "./views/timetable.js";
 import homework from "./views/homework.js";
 import grades from "./views/grades.js";
+import simulators from "./views/simulators.js";
 import resources from "./views/resources.js";
 import notebook from "./views/notebook.js";
 import news from "./views/news.js";
@@ -13,7 +14,7 @@ import account from "./views/account.js";
 import stats from "./views/stats.js";
 import settings, { setViews } from "./views/settings.js";
 
-const views = [home, timetable, homework, grades, stats, resources, notebook, news, documents, account, settings];
+const views = [home, timetable, homework, grades, stats, simulators, resources, notebook, news, documents, account, settings];
 setViews(() => views);
 const $ = (id) => document.getElementById(id);
 
