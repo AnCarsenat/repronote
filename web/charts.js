@@ -330,7 +330,7 @@ export function vBarChart(bars, { label = "", highlight = null, format = (v) => 
       if (i % every === 0 || b.label === highlight) els.push(s("text", { x: cx, y: H - 7, class: `tick ${b.label === highlight ? "today" : ""}`, "text-anchor": "middle" }, b.label));
       const hit = s("rect", { x: m.l + band * i, y: m.t, width: band, height: ph, class: "hit" });
       hit.addEventListener("pointerenter", () => {
-        tooltip.replaceChildren(h("strong", {}, b.title ?? b.label), h("div", {}, format(b.value)), b.detail ? h("div", { class: "muted" }, b.detail) : null);
+        tooltip.replaceChildren(h("strong", {}, b.title ?? b.label), h("div", {}, format(b.value)), ...(b.detail ? [h("div", { class: "muted" }, b.detail)] : []));
         tooltip.hidden = false;
         tooltip.style.left = `${(cx / W) * 100}%`;
         hit.classList.add("active");
