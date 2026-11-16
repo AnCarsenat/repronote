@@ -1,4 +1,4 @@
-// "Simulateurs": exam calculators (bac général / techno / pro, brevet, weighted average).
+// "Calculateurs": exam calculators (bac général / techno / pro, brevet, weighted average).
 // Rules and coefficients come from ../exam-rules.js; marks can be prefilled from
 // Pronote averages and every field stays editable. Entries are kept per
 // calculator in localStorage (this browser only).
@@ -6,6 +6,7 @@ import { h, subjectName, isNumber, fmtNum, estimateAverage } from "../lib.js";
 import { store } from "../state.js";
 import { R, normalize } from "../coef-presets.js";
 import { CALCULATORS, GROUPS, RULES_CHECKED } from "../exam-rules.js";
+import { renderPoints } from "../points-calc.js";
 
 const KEY = "repronote.simulateurs.v1";
 let saved = load();
@@ -259,7 +260,7 @@ function coefText(def, item) {
 
 export default {
   id: "simulateurs",
-  title: "Simulateurs",
+  title: "Calculateurs",
 
   render(data, rerender) {
     // Keep focus/caret when the app re-renders (background refresh every minute).
@@ -279,6 +280,16 @@ export default {
     }
 
     const u = ui();
+    // First chip: where one more grade raises the overall average the most.
+    const pointsChip = h("button", { type: "button", class: `chip ${u.calc === "points" ? "active" : ""}`, "aria-pressed": u.calc === "points" ? "true" : "false",
+      onclick: () => ((u.calc = "points"), persist(), rerender()) }, "Où gagner des points");
+    if (u.calc === "points") {
+      return [
+        h("div", { class: "view-toolbar" }, pointsChip,
+          CALCULATORS.map((c) => h("button", { type: "button", class: "chip", "aria-pressed": "false", onclick: () => ((u.calc = c.id), persist(), rerender()) }, c.label))),
+        renderPoints(data, rerender),
+      ];
+    }
     const calc = CALCULATORS.find((c) => c.id === u.calc) ?? CALCULATORS[0];
     const level = u.level ?? guessLevel(data);
     u.sessions ??= {};
@@ -302,6 +313,7 @@ export default {
 
     // ---- Toolbars ----
     const toolbar = h("div", { class: "view-toolbar" },
+      pointsChip,
       CALCULATORS.map((c) =>
         h("button", { type: "button", class: `chip ${c === calc ? "active" : ""}`, "aria-pressed": c === calc ? "true" : "false", onclick: () => set({ calc: c.id }) }, c.label)),
     );

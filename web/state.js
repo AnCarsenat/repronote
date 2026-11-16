@@ -160,3 +160,18 @@ export async function firstLogin(url) {
     emit();
   }
 }
+
+// ---- Notifications and webhooks (settings on the server) ----
+
+/** Saves what to notify and where. Returns an error message, or null. */
+export async function saveNotifications(settings) {
+  const res = await fetch("/api/notifications", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return body.error ?? `Erreur ${res.status}`;
+  store.state = body;
+  emit();
+  return null;
+}
+
+/** Sends a test notification everywhere: { ok, errors, system }. */
+export const testNotifications = () => call("/api/notifications/test", { method: "POST" });

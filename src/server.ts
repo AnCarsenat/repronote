@@ -16,6 +16,7 @@ import { applyPendingToSnapshot, archiveHomework, homeworkKey, syncAll } from ".
 import { newsKey } from "./core/browser-session.ts";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "./mcp/tools.ts";
+import * as notify from "./notify/notifications.ts";
 import { lookupEmails, type EmailLookup } from "./core/webmail.ts";
 
 const PORT = Number(process.env.PORT ?? 4173);
@@ -33,6 +34,8 @@ const API_INDEX = {
     { method: "POST", path: "/api/login", description: "Open the login window on this computer, then sync. Returns /api/state." },
     { method: "POST", path: "/api/homework/:id/done", body: "{ done: boolean }", description: "Tick/untick homework (queued if offline)." },
     { method: "PUT", path: "/api/layout", body: "{ widgets: [{ id, type, col, size?, settings? }] }", description: "Home screen layout." },
+    { method: "PUT", path: "/api/notifications", body: "{ kinds: { grade, homework, news, canceled }, system: boolean, webhooks: [{ url, format: 'discord'|'json', name? }] }", description: "What to notify, and where (webhooks)." },
+    { method: "POST", path: "/api/notifications/test", description: "Send a test notification to every channel." },
     { method: "PUT", path: "/api/subject-settings", body: "{ [subject]: { coef, mode: 'normal'|'bonus'|'excluded' } }", description: "Subject coefficients for the computed average." },
     { method: "GET", path: "/api/file?id=&n=&u=", description: "A Pronote attachment (cached locally)." },
     { method: "GET", path: "/api/doc/casier?id=&n=", description: "A document from the casier (cached locally)." },
@@ -69,8 +72,12 @@ function classify(err: unknown): SyncStatus {
 function sync(interactive = false, url?: string): Promise<SyncStatus> {
   syncing ??= (async () => {
     let status: SyncStatus;
+    const before = notify.takeSnapshot(store);
+    const archiveBefore = store.get<Record<string, unknown>>("homeworkArchive") ?? {};
     try {
       const failures = await live.use((session) => syncAll(session, store), { interactive, url });
+      // What's new since the last sync: webhooks and notifications (in the background).
+      void notify.dispatch(store, notify.diff(before, notify.takeSnapshot(store), archiveBefore));
       // Optional kinds (documents, report cards...) may legitimately fail; keep
       // their errors for the UI without turning the whole sync red.
       store.put("syncWarnings", failures);
@@ -169,6 +176,9 @@ const state = () => ({
   pending: store.pending().length,
   layout: store.getSetting("layout"),
   subjectSettings: store.getSetting("subjectSettings"),
+  notifications: notify.getSettings(store),
+  systemNotifications: notify.hasSystemNotifier(),
+  events: notify.recentEvents(store).slice(0, 20),
   pronoteURL: pronoteURL,
   data: store.all(),
 });
@@ -267,6 +277,21 @@ const server = createServer(async (req, res) => {
       if (!Array.isArray(layout?.widgets) || layout.widgets.length > 50) return json(res, { error: "Invalid layout" }, 400);
       store.setSetting("layout", layout);
       return json(res, { ok: true });
+    }
+    if (url.pathname === "/api/notifications" && req.method === "PUT") {
+      const value = await readJson(req);
+      const error = notify.validateSettings(value);
+      if (error) return json(res, { error }, 400);
+      store.setSetting("notifications", {
+        kinds: value.kinds,
+        system: value.system !== false,
+        webhooks: value.webhooks.map((w: any, i: number) => ({ id: String(w.id ?? i), url: w.url, format: w.format, name: w.name ? String(w.name).slice(0, 60) : undefined })),
+      });
+      return json(res, state());
+    }
+    if (url.pathname === "/api/notifications/test" && req.method === "POST") {
+      const errors = await notify.dispatch(store, [notify.testEvent()], { force: true });
+      return json(res, { ok: errors.length === 0, errors, system: notify.hasSystemNotifier() });
     }
     if (url.pathname === "/api/subject-settings" && req.method === "PUT") {
       const value = await readJson(req);

@@ -1,4 +1,4 @@
-// Exam rules for the "Simulateurs" page — ALL coefficients and thresholds live here.
+// Exam rules for the "Calculateurs" page — ALL coefficients and thresholds live here.
 //
 // Checked in November 2026 against the texts listed in SOURCES. When a rule
 // changes, update it here; anything that could not be checked is flagged with

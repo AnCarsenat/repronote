@@ -1,65 +1,204 @@
 #!/usr/bin/env bash
-# Installs the latest repronote AppImage for every user:
-#   /usr/local/bin/repronote, plus an icon and an entry in the applications menu.
-# Usage: curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh | bash
-#        (or: bash install-linux.sh --uninstall)
+# Installs the latest repronote on Linux, for every user, with an applications-menu entry.
+#
+#   curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh | bash
+#
+# Two versions:
+#   --app      the desktop application (AppImage, nothing else needed)       -> /usr/local/bin/repronote
+#   --server   the local server, used in your web browser (needs Node.js ≥ 24
+#              and Chromium/Chrome for the login)                            -> /opt/repronote-server
+#              add --autostart to start it with your session (keeps notifications and webhooks running)
+#   PREFIX=~/.local OPT_DIR=~/.local/opt bash install-linux.sh …   installs for you only, without sudo
+# Without a choice, the script asks (or installs the app when it can't ask).
+#   --uninstall   removes both
 set -euo pipefail
 
 REPO="AnCarsenat/repronote"
-BIN="/usr/local/bin/repronote"
-DESKTOP="/usr/local/share/applications/repronote.desktop"
-ICON="/usr/local/share/icons/hicolor/512x512/apps/repronote.png"
+# PREFIX / OPT_DIR can be changed (e.g. PREFIX=~/.local for a per-user install without sudo).
+PREFIX="${PREFIX:-/usr/local}"
+OPT_DIR="${OPT_DIR:-/opt}"
+APP_BIN="$PREFIX/bin/repronote"
+SERVER_DIR="$OPT_DIR/repronote-server"
+SERVER_BIN="$PREFIX/bin/repronote-server"
+APPS="$PREFIX/share/applications"
+ICON="$PREFIX/share/icons/hicolor/512x512/apps/repronote.png"
+UNIT="$HOME/.config/systemd/user/repronote.service"
 
-if [[ "${1:-}" == "--uninstall" ]]; then
-  sudo rm -f "$BIN" "$DESKTOP" "$ICON"
-  echo "repronote a été désinstallé."
+mode=""
+autostart=""
+for arg in "$@"; do
+  case "$arg" in
+    --app) mode="app" ;;
+    --server) mode="server" ;;
+    --autostart) autostart="yes" ;;
+    --no-autostart) autostart="no" ;;
+    --uninstall) mode="uninstall" ;;
+    -h|--help) sed -n '2,13p' "$0" 2>/dev/null || true; exit 0 ;;
+    *) echo "Option inconnue : $arg (voir --help)" >&2; exit 2 ;;
+  esac
+done
+
+# sudo only when the install folders aren't writable by you.
+SUDO=""
+for d in "$PREFIX" "$OPT_DIR"; do
+  mkdir -p "$d" 2>/dev/null || true
+  [[ -w "$d" ]] || SUDO="sudo"
+done
+
+say() { printf '\033[1m%s\033[0m\n' "$*"; }
+die() { echo "Erreur : $*" >&2; exit 1; }
+# Questions read the terminal even when the script comes from `curl … | bash`.
+ask() {
+  local answer=""
+  if [[ -r /dev/tty ]]; then read -r -p "$1" answer </dev/tty || true; fi
+  printf '%s' "$answer"
+}
+
+if [[ "$mode" == "uninstall" ]]; then
+  if [[ -f "$UNIT" ]]; then
+    systemctl --user disable --now repronote.service 2>/dev/null || true
+    rm -f "$UNIT"
+  fi
+  "$SERVER_BIN" --stop 2>/dev/null || true
+  $SUDO rm -rf "$APP_BIN" "$SERVER_BIN" "$SERVER_DIR" "$APPS/repronote.desktop" "$APPS/repronote-server.desktop" "$ICON"
+  say "repronote a été désinstallé. Vos données restent dans ~/.config/repronote (application) et ~/.local/share/repronote (serveur)."
   exit 0
 fi
 
-if [[ "$(uname -m)" != "x86_64" ]]; then
-  echo "Erreur : seul Linux x86_64 est pris en charge pour l'instant." >&2
-  exit 1
+if [[ -z "$mode" ]]; then
+  echo "Quelle version installer ?"
+  echo "  1) L'application (recommandé : rien d'autre à installer)"
+  echo "  2) Le serveur, utilisé dans votre navigateur (demande Node.js ≥ 24 et Chromium)"
+  case "$(ask "Votre choix [1] : ")" in
+    2) mode="server" ;;
+    *) mode="app" ;;
+  esac
 fi
 
-echo "Les droits administrateur sont nécessaires pour installer dans /usr/local."
-if ! sudo -v; then
-  echo "Erreur : impossible d'obtenir les droits administrateur." >&2
-  exit 87
+[[ "$(uname -m)" == "x86_64" || "$mode" == "server" ]] || die "l'application n'existe que pour Linux x86_64 ; essayez --server."
+
+# Server prerequisites, checked before asking for sudo.
+if [[ "$mode" == "server" ]]; then
+  command -v node >/dev/null || die "Node.js n'est pas installé (il faut la version 24 ou plus : https://nodejs.org ou le gestionnaire de paquets de votre distribution)."
+  node_major="$(node -p 'process.versions.node.split(".")[0]')"
+  (( node_major >= 24 )) || die "Node.js $(node -v) est trop ancien : il faut la version 24 ou plus."
+  command -v npm >/dev/null || die "npm est introuvable (il est normalement installé avec Node.js)."
+  chromium=""
+  for c in chromium chromium-browser google-chrome-stable google-chrome; do
+    if command -v "$c" >/dev/null; then chromium="$(command -v "$c")"; break; fi
+  done
+  [[ -n "$chromium" ]] || echo "Attention : Chromium/Chrome introuvable. Installez-le : la connexion à l'ENT se fait dans une fenêtre Chromium."
+  if [[ -z "$autostart" ]] && command -v systemctl >/dev/null; then
+    [[ "$(ask "Démarrer le serveur avec votre session (notifications et webhooks même navigateur fermé) ? [o/N] : ")" =~ ^[oOyY] ]] && autostart="yes"
+  fi
 fi
 
-# The file name contains the version: find the latest one from the release redirect.
+if [[ -n "$SUDO" ]]; then
+  say "Les droits administrateur sont nécessaires pour installer dans $PREFIX et $OPT_DIR."
+  sudo -v || die "impossible d'obtenir les droits administrateur."
+fi
+
+# The file names contain the version: find the latest one from the release redirect.
 TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")"
 TAG="${TAG##*/}"
 VERSION="${TAG#v}"
-if [[ -z "$VERSION" || "$VERSION" == "latest" ]]; then
-  echo "Erreur : impossible de trouver la dernière version." >&2
-  exit 1
-fi
-FILE="repronote-$VERSION-linux-x86_64.AppImage"
+[[ -n "$VERSION" && "$VERSION" != "latest" ]] || die "impossible de trouver la dernière version."
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+download() { curl -fL --progress-bar -o "$TMP/$1" "https://github.com/$REPO/releases/download/$TAG/$1"; }
 
-echo "Téléchargement de repronote $VERSION…"
-curl -fL --progress-bar -o "$TMP/$FILE" "https://github.com/$REPO/releases/download/$TAG/$FILE"
 curl -fsSL -o "$TMP/icon.png" "https://raw.githubusercontent.com/$REPO/$TAG/build/icon.png" || true
+if [[ -s "$TMP/icon.png" ]]; then $SUDO install -Dm644 "$TMP/icon.png" "$ICON"; fi
+$SUDO install -d "$APPS"
 
-echo "Installation…"
-sudo install -Dm755 "$TMP/$FILE" "$BIN"
-if [[ -s "$TMP/icon.png" ]]; then
-  sudo install -Dm644 "$TMP/icon.png" "$ICON"
-fi
-sudo install -d "$(dirname "$DESKTOP")"
-sudo tee "$DESKTOP" >/dev/null <<DESKTOP_ENTRY
+desktop_entry() { # file, name, comment, exec
+  $SUDO tee "$APPS/$1" >/dev/null <<ENTRY
 [Desktop Entry]
 Type=Application
-Name=repronote
-Comment=Une interface alternative pour Pronote
-Exec=$BIN %U
+Name=$2
+Comment=$3
+Exec=$4
 Icon=repronote
 Terminal=false
 Categories=Education;
-DESKTOP_ENTRY
-command -v update-desktop-database >/dev/null && sudo update-desktop-database -q "$(dirname "$DESKTOP")" || true
+ENTRY
+}
 
-echo "C'est fait : repronote $VERSION est installé. Lancez-le depuis le menu des applications ou avec la commande « repronote »."
+if [[ "$mode" == "app" ]]; then
+  FILE="repronote-$VERSION-linux-x86_64.AppImage"
+  say "Téléchargement de l'application repronote $VERSION…"
+  download "$FILE"
+  $SUDO install -Dm755 "$TMP/$FILE" "$APP_BIN"
+  desktop_entry repronote.desktop "repronote" "Une interface alternative pour Pronote" "$APP_BIN %U"
+  done_msg="repronote $VERSION est installé. Lancez-le depuis le menu des applications ou avec la commande « repronote »."
+else
+  FILE="repronote-server-$TAG.zip"
+  say "Téléchargement du serveur repronote $VERSION…"
+  download "$FILE"
+  mkdir "$TMP/x"
+  if command -v unzip >/dev/null; then unzip -q "$TMP/$FILE" -d "$TMP/x"
+  elif command -v python3 >/dev/null; then python3 -m zipfile -e "$TMP/$FILE" "$TMP/x"
+  else die "il faut unzip (ou python3) pour extraire l'archive."; fi
+  say "Installation des dépendances (npm)…"
+  (cd "$TMP/x/repronote-server" && npm install --omit=dev --no-audit --no-fund --loglevel=error)
+  "$SERVER_BIN" --stop 2>/dev/null || true
+  $SUDO rm -rf "$SERVER_DIR"
+  $SUDO cp -r "$TMP/x/repronote-server" "$SERVER_DIR"
+  $SUDO chmod -R a+rX "$SERVER_DIR"
+
+  # Launcher: starts the server in the background if needed, then opens the browser.
+  $SUDO install -d "$(dirname "$SERVER_BIN")"
+  chromium_line=""
+  [[ -z "$chromium" ]] || chromium_line="export CHROMIUM_PATH=\"\${CHROMIUM_PATH:-$chromium}\""
+  $SUDO tee "$SERVER_BIN" >/dev/null <<LAUNCHER
+#!/usr/bin/env bash
+# repronote (server): repronote-server [--foreground | --stop]
+set -euo pipefail
+export REPRONOTE_DATA_DIR="\${REPRONOTE_DATA_DIR:-\${XDG_DATA_HOME:-\$HOME/.local/share}/repronote}"
+export PORT="\${PORT:-4173}"
+$chromium_line
+STATE="\${XDG_STATE_HOME:-\$HOME/.local/state}/repronote"
+URL="http://localhost:\$PORT"
+mkdir -p "\$REPRONOTE_DATA_DIR" "\$STATE"
+running() { curl -fsS -o /dev/null "\$URL/api" 2>/dev/null; }
+case "\${1:-}" in
+  --foreground) exec node "$SERVER_DIR/dist/server.mjs" ;;
+  --stop)
+    if [[ -f "\$STATE/server.pid" ]]; then kill "\$(cat "\$STATE/server.pid")" 2>/dev/null || true; rm -f "\$STATE/server.pid"; fi
+    exit 0 ;;
+esac
+if ! running; then
+  nohup node "$SERVER_DIR/dist/server.mjs" >>"\$STATE/server.log" 2>&1 &
+  echo \$! >"\$STATE/server.pid"
+  for _ in \$(seq 1 50); do running && break; sleep 0.2; done
+  running || { echo "Le serveur n'a pas démarré, voir \$STATE/server.log" >&2; exit 1; }
+fi
+xdg-open "\$URL" >/dev/null 2>&1 || echo "repronote : \$URL"
+LAUNCHER
+  $SUDO chmod 755 "$SERVER_BIN"
+  desktop_entry repronote-server.desktop "repronote (serveur)" "Une interface alternative pour Pronote, dans votre navigateur" "$SERVER_BIN"
+
+  if [[ "$autostart" == "yes" ]]; then
+    mkdir -p "$(dirname "$UNIT")"
+    cat >"$UNIT" <<SERVICE
+[Unit]
+Description=repronote (serveur local Pronote)
+After=network-online.target
+
+[Service]
+ExecStart=$SERVER_BIN --foreground
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+SERVICE
+    systemctl --user daemon-reload
+    systemctl --user enable --now repronote.service
+    say "Le serveur démarrera avec votre session."
+  fi
+  done_msg="repronote $VERSION (serveur) est installé. Lancez « repronote (serveur) » depuis le menu des applications, ou la commande « repronote-server » : l'interface s'ouvre dans votre navigateur (http://localhost:4173)."
+fi
+
+command -v update-desktop-database >/dev/null && $SUDO update-desktop-database -q "$APPS" || true
+say "C'est fait : $done_msg"

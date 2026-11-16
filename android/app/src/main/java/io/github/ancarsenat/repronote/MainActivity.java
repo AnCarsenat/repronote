@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
         WebView.setWebContentsDebuggingEnabled(true);
         CookieManager.getInstance().setAcceptCookie(true);
         buildLayout();
+        Notifications.requestPermission(this);
         try {
             startBackend();
         } catch (Exception e) {
@@ -87,7 +88,12 @@ public class MainActivity extends Activity {
         if (bridge != null) return;
         accessToken = randomToken();
         String bridgeToken = randomToken();
+        final android.content.Context appContext = getApplicationContext();
         bridge = new Bridge(bridgeToken, command -> {
+            if (command.optString("cmd").equals("notify")) {
+                Notifications.show(appContext, command.optString("title"), command.optString("body"));
+                return;
+            }
             MainActivity a = current;
             if (a != null) a.onCommand(command);
             else bridge.emit("closed", command.optInt("id"));
