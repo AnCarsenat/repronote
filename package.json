@@ -1,6 +1,6 @@
 {
   "name": "repronote",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Interface alternative pour Pronote : hors ligne, widgets, API locale. Connexion via l'ENT dans un vrai navigateur.",
   "license": "GPL-3.0-or-later",
