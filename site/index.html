@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>repronote — Pronote, en mieux</title>
+  <meta name="description" content="repronote : une interface gratuite et libre pour Pronote. Emploi du temps, notes, devoirs, notifications, emploi du temps partagé avec vos amis. Android, Windows, Linux.">
+  <meta property="og:title" content="repronote — Pronote, en mieux">
+  <meta property="og:description" content="Emploi du temps, notes et devoirs plus lisibles, notifications, et voir quand on est libres en même temps. Gratuit, sans pub, vos données restent chez vous.">
+  <meta property="og:image" content="https://ancarsenat.github.io/repronote/screenshots/accueil.png">
+  <link rel="icon" href="icon.svg">
+  <style>
+    :root {
+      --bg: #f4f4f8; --card: #ffffff; --text: #1c1c24; --muted: #62627a; --border: #e3e3ea;
+      --accent: #5b5bd6; --accent-2: #4646c4; --accent-soft: #ececfb; --accent-text: #fff; --good: #1f8a4c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111116; --card: #1b1b23; --text: #ececf1; --muted: #a0a0b4; --border: #2c2c38; --accent: #8b8bf0; --accent-2: #a5a5f5; --accent-soft: #26264a; --accent-text: #111116; --good: #5fd08f; }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    a { color: var(--accent); }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+    header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: var(--text); text-decoration: none; }
+    .brand img { width: 34px; height: 34px; }
+    .top nav { display: flex; gap: 18px; font-size: 0.95rem; }
+    .top nav a { color: var(--muted); text-decoration: none; }
+    .top nav a:hover { color: var(--text); }
+
+    .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; padding: 36px 0 56px; }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.08; margin: 0 0 16px; letter-spacing: -0.02em; }
+    .hero h1 span { color: var(--accent); }
+    .hero p.lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 26px; max-width: 34em; }
+    .cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 12px; font-weight: 650; font-size: 1.02rem; text-decoration: none; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); transition: transform .12s, box-shadow .12s; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+    .btn.secondary { background: transparent; color: var(--accent); }
+    .btn small { font-weight: 450; opacity: .85; }
+    .btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    .hint { color: var(--muted); font-size: 0.88rem; margin-top: 12px; }
+    .shot { position: relative; }
+    .shot img { width: 100%; border-radius: 14px; border: 1px solid var(--border); box-shadow: 0 24px 60px rgba(30, 30, 80, .18); display: block; }
+    .shot .phone { position: absolute; width: 30%; right: -4%; bottom: -12%; border-radius: 18px; border: 4px solid var(--card); box-shadow: 0 16px 40px rgba(30, 30, 80, .28); }
+
+    section { padding: 48px 0; }
+    h2 { font-size: 1.7rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); margin: 0 0 28px; }
+    .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .feature { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+    .feature b { display: block; margin-bottom: 4px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .feature .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-bottom: 10px; }
+    .feature .ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .downloads { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+    .dl { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .dl.recommended { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .dl h3 { margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
+    .dl .badge { font-size: 0.72rem; font-weight: 600; background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 99px; }
+    .dl p { margin: 0; color: var(--muted); font-size: 0.93rem; }
+    .dl .btn { justify-content: center; margin-top: auto; }
+    .dl .links { font-size: 0.88rem; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+    code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.86rem; }
+    pre { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; overflow-x: auto; margin: 0; white-space: pre-wrap; word-break: break-all; }
+    .copy { font: inherit; font-size: 0.82rem; border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer; align-self: flex-start; }
+
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+    .gallery figure { margin: 0; background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .gallery img { width: 100%; display: block; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+    .gallery figcaption { padding: 10px 14px; font-size: 0.92rem; color: var(--muted); }
+
+    .dev-banner { background: #fff4d6; color: #6b4e00; border-radius: 12px; padding: 10px 14px; margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) { .dev-banner { background: #3a3014; color: #f3d98a; } }
+    .faq details { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; }
+    .faq summary { cursor: pointer; font-weight: 600; }
+    .faq p { color: var(--muted); margin: 10px 0 0; }
+    footer { padding: 36px 0 48px; color: var(--muted); font-size: 0.9rem; border-top: 1px solid var(--border); margin-top: 24px; }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding-top: 12px; gap: 48px; }
+      .shot .phone { right: 2%; }
+      .top nav { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="#"><img src="icon.svg" alt="">repronote</a>
+      <nav aria-label="Sections">
+        <a href="#fonctions">Fonctions</a>
+        <a href="#telecharger">Télécharger</a>
+        <a href="#questions">Questions</a>
+        <a href="https://github.com/AnCarsenat/repronote">GitHub</a>
+        <a id="channel-link" href="dev/">Version de dev</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="dev-banner" id="dev-banner" hidden>Vous êtes sur la page de la <strong>version de développement</strong> : les nouveautés en avance, reconstruites à chaque modification, parfois instables. <a href="../">Version stable →</a></p>
+      <div class="hero">
+        <div>
+          <h1>Pronote,<br><span>en mieux.</span></h1>
+          <p class="lead">Emploi du temps, notes et devoirs enfin lisibles, des notifications quand une note tombe, et vos moyennes vraiment calculées. Gratuit, sans pub, et vos données restent chez vous.</p>
+          <div class="cta">
+            <a class="btn" id="main-dl" href="#telecharger">
+              <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              <span id="main-dl-label">Télécharger</span>
+            </a>
+            <a class="btn secondary" href="#telecharger">Toutes les versions</a>
+          </div>
+          <p class="hint" id="main-dl-hint">Android, Windows et Linux. Logiciel libre (GPL-3.0).</p>
+        </div>
+        <div class="shot">
+          <img src="screenshots/accueil.png" alt="L'accueil de repronote : cours du jour, devoirs, dernières notes" width="1360" height="860">
+          <img class="phone" src="screenshots/mobile.png" alt="repronote sur téléphone" loading="lazy">
+        </div>
+      </div>
+
+      <section id="fonctions">
+        <h2>Tout Pronote, plus clair</h2>
+        <p class="sub">La même connexion qu'à l'ENT, une interface pensée pour aller vite.</p>
+        <div class="features">
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4zM4 10h16M9 3v4M15 3v4"/></svg></div><b>Emploi du temps</b><p>La semaine en un coup d'œil, cours annulés et évaluations bien visibles, et sur téléphone 1, 3 ou 5 jours.</p></div>
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6"/></svg></div><b>Notes et statistiques</b><p>Moyennes avec vos coefficients, graphiques, et où une note de plus rapporte le plus.</p></div>
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg></div><b>Devoirs</b><p>À faire, en retard, faits : cochez-les, même hors ligne (envoyés au retour du réseau).</p></div>
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><b>Notifications</b><p>Nouvelle note, devoir, information ou cours annulé : sur l'appareil ou sur Discord.</p></div>
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zM12 22V12M21 7l-9 5-9-5"/></svg></div><b>Calculateurs</b><p>Bac, brevet, moyenne pondérée, et où une note de plus rapporte le plus de points.</p></div>
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><b>Vie privée</b><p>Pas de compte, pas de serveur : tout reste sur votre téléphone ou votre ordinateur.</p></div>
+          <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div><b>Vos données</b><p>Bulletins et documents gardés hors ligne, et tout exportable en JSON.</p></div>
+        </div>
+      </section>
+
+      <section id="telecharger">
+        <h2>Télécharger</h2>
+        <p class="sub">Dernière version : <strong id="version">…</strong> <span id="released"></span></p>
+        <div class="downloads">
+          <div class="dl" data-os="android">
+            <h3>Android</h3>
+            <p>Téléchargez l'APK et ouvrez-le (autorisez l'installation d'applications inconnues si demandé). Si une ancienne version est installée, désinstallez-la d'abord.</p>
+            <a class="btn" data-asset="android-arm64-v8a.apk" href="https://github.com/AnCarsenat/repronote/releases/latest">Télécharger l'APK</a>
+            <div class="links"><a data-asset="android-armeabi-v7a.apk" href="https://github.com/AnCarsenat/repronote/releases/latest">Vieux téléphones (32 bits)</a><a data-asset="android-x86_64.apk" href="https://github.com/AnCarsenat/repronote/releases/latest">x86_64</a></div>
+          </div>
+          <div class="dl" data-os="windows">
+            <h3>Windows</h3>
+            <p>L'installateur, puis lancez « repronote » depuis le menu Démarrer. Si SmartScreen s'affiche : « Informations complémentaires » → « Exécuter quand même ».</p>
+            <a class="btn" data-asset="win-x64.exe" href="https://github.com/AnCarsenat/repronote/releases/latest">Télécharger pour Windows</a>
+          </div>
+          <div class="dl" data-os="linux">
+            <h3>Linux</h3>
+            <p>En une commande (application ou serveur, avec une entrée dans le menu) :</p>
+            <pre id="linux-cmd">curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh | bash</pre>
+            <button class="copy" type="button" data-copy="linux-cmd">Copier la commande</button>
+            <div class="links"><a data-asset="linux-x86_64.AppImage" href="https://github.com/AnCarsenat/repronote/releases/latest">AppImage</a><a data-asset="linux-amd64.deb" href="https://github.com/AnCarsenat/repronote/releases/latest">.deb</a><a data-asset="linux-x64.tar.gz" href="https://github.com/AnCarsenat/repronote/releases/latest">.tar.gz</a></div>
+          </div>
+          <div class="dl" data-os="other">
+            <h3>macOS et serveur</h3>
+            <p>Le serveur local s'utilise dans le navigateur, sur n'importe quel système avec Node.js 24 et Chromium.</p>
+            <a class="btn secondary" data-asset="repronote-server-" href="https://github.com/AnCarsenat/repronote/releases/latest">Télécharger le serveur (.zip)</a>
+            <div class="links"><a href="https://github.com/AnCarsenat/repronote#guide-détaillé">Guide d'installation</a></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>En images</h2>
+        <p class="sub">Captures faites avec des données fictives.</p>
+        <div class="gallery">
+          <figure><img src="screenshots/emploi-du-temps.png" alt="Emploi du temps de la semaine" loading="lazy"><figcaption>Emploi du temps</figcaption></figure>
+          <figure><img src="screenshots/notes.png" alt="Notes par matière" loading="lazy"><figcaption>Notes et moyennes</figcaption></figure>
+          <figure><img src="screenshots/statistiques.png" alt="Statistiques" loading="lazy"><figcaption>Statistiques</figcaption></figure>
+          <figure><img src="screenshots/devoirs.png" alt="Devoirs" loading="lazy"><figcaption>Devoirs</figcaption></figure>
+          <figure><img src="screenshots/sombre.png" alt="Thème sombre" loading="lazy"><figcaption>Thème sombre</figcaption></figure>
+        </div>
+      </section>
+
+      <section id="questions" class="faq">
+        <h2>Questions</h2>
+        <details><summary>Est-ce que c'est officiel ?</summary><p>Non : repronote est un projet indépendant et libre, non affilié à Index Éducation. Il utilise votre connexion habituelle (ENT ou identifiants Pronote) et parle à Pronote comme le site officiel.</p></details>
+        <details><summary>Où vont mes données et mon mot de passe ?</summary><p>Nulle part ailleurs que chez vous. Vous vous connectez dans une fenêtre de l'ENT ; repronote ne voit ni n'enregistre votre mot de passe. Les données sont stockées sur votre appareil, et rien n'est envoyé à un autre serveur que Pronote.</p></details>
+        <details><summary>Ça marche avec mon établissement ?</summary><p>Avec la plupart des établissements utilisant Pronote, y compris via l'ENT de la région. Si ce n'est pas le cas, ouvrez un ticket sur GitHub.</p></details>
+        <details><summary>C'est gratuit ?</summary><p>Oui, sans pub et sans abonnement. Le code est libre (GPL-3.0) : tout le monde peut le vérifier et l'améliorer.</p></details>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <div class="wrap">
+      <span>repronote — logiciel libre (GPL-3.0). Projet indépendant, non affilié à Index Éducation.</span>
+      <span><a href="https://github.com/AnCarsenat/repronote">Code source</a> · <a href="https://github.com/AnCarsenat/repronote/issues">Signaler un problème</a></span>
+    </div>
+  </footer>
+
+  <script>
+    // Links to the latest release's files (their names contain the version),
+    // and the right download for this device. Without the API, links go to the release page.
+    const REPO = "AnCarsenat/repronote";
+    // Same page for both channels: /repronote/ (stable) and /repronote/dev/ (dev pre-release).
+    const DEV = /\/dev\/?$/.test(location.pathname.replace(/index\.html$/, ""));
+    const RELEASE_PAGE = `https://github.com/${REPO}/releases/${DEV ? "tag/dev" : "latest"}`;
+    if (DEV) {
+      document.getElementById("dev-banner").hidden = false;
+      const link = document.getElementById("channel-link");
+      link.textContent = "Version stable";
+      link.href = "../";
+      document.title = "repronote (dev) — Pronote, en mieux";
+      document.getElementById("linux-cmd").textContent = `curl -fsSL https://github.com/${REPO}/releases/download/dev/install-linux.sh | bash -s -- --dev`;
+    }
+    for (const a of document.querySelectorAll('a[href$="/releases/latest"]')) a.href = RELEASE_PAGE;
+    const ua = navigator.userAgent;
+    const os = /Android/i.test(ua) ? "android" : /Windows/i.test(ua) ? "windows" : /Linux|X11/i.test(ua) && !/CrOS/i.test(ua) ? "linux" : /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "other" : null;
+    const labels = { android: "Télécharger pour Android", windows: "Télécharger pour Windows", linux: "Installer sur Linux", other: "Télécharger le serveur" };
+    const mainAsset = { android: "android-arm64-v8a.apk", windows: "win-x64.exe", linux: null, other: "repronote-server-" };
+    if (/iPhone|iPad/i.test(ua)) document.getElementById("main-dl-hint").textContent = "Pas encore d'application iPhone : utilisez repronote sur un ordinateur, ou Android.";
+    if (os) {
+      document.querySelector(`.dl[data-os="${os}"]`)?.classList.add("recommended");
+      document.querySelector(`.dl[data-os="${os}"] h3`)?.insertAdjacentHTML("beforeend", '<span class="badge">votre appareil</span>');
+      document.getElementById("main-dl-label").textContent = labels[os];
+      if (os === "linux") document.getElementById("main-dl").href = "#telecharger";
+    }
+    fetch(`https://api.github.com/repos/${REPO}/releases/${DEV ? "tags/dev" : "latest"}`, { headers: { Accept: "application/vnd.github+json" } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((release) => {
+        document.getElementById("version").textContent = DEV ? (/\d+\.\d+\.\d+-dev\.\d+/.exec(release.name ?? "")?.[0] ?? "dev") : release.tag_name;
+        document.getElementById("released").textContent = `· publiée le ${new Date(release.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`;
+        const find = (suffix) => release.assets.find((a) => (suffix.endsWith("-") ? a.name.startsWith(suffix) : a.name.endsWith(suffix)));
+        for (const a of document.querySelectorAll("[data-asset]")) {
+          const asset = find(a.dataset.asset);
+          if (asset) {
+            a.href = asset.browser_download_url;
+            a.title = `${asset.name} · ${(asset.size / 1048576).toFixed(0)} Mo`;
+          }
+        }
+        const main = os && mainAsset[os] && find(mainAsset[os]);
+        if (main) document.getElementById("main-dl").href = main.browser_download_url;
+      })
+      .catch(() => (document.getElementById("version").textContent = DEV ? "pas encore de version de dev publiée" : "voir la page des versions"));
+    for (const b of document.querySelectorAll("[data-copy]")) {
+      b.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+          b.textContent = "Copié ✓";
+        } catch {
+          b.textContent = "Sélectionnez et copiez";
+        }
+        setTimeout(() => (b.textContent = "Copier la commande"), 2000);
+      });
+    }
+  </script>
+</body>
+</html>

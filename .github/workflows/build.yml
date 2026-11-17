@@ -1,11 +1,13 @@
 # Builds the desktop apps (Linux, Windows), the Android app and the standalone Node server.
 # - Every push / pull request: build and keep the files as workflow artifacts.
-# - A version tag (v1.2.3): also publish them as a GitHub release.
+# - Push to dev: also publish them as the rolling "dev" pre-release (version X.Y.Z-dev.<run>).
+# - A version tag (vX.Y.Z, from main): publish them as a stable GitHub release.
+# Versions: scripts/ci-version.mjs. Branches and releases: docs/releases.md.
 name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -26,7 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Check web modules
-        run: for f in web/*.js web/views/*.js web/widgets/*.js; do node --check "$f"; done
+        run: for f in web/*.js web/views/*.js web/widgets/*.js web/plugins/*.js; do node --check "$f"; done
 
   server:
     needs: check
@@ -38,11 +40,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node scripts/ci-version.mjs
       - run: npm run dist:server
       - name: Zip
         run: |
           cd release
-          zip -qr "repronote-server-${GITHUB_REF_NAME//\//-}.zip" repronote-server
+          zip -qr "repronote-server-v$REPRONOTE_VERSION.zip" repronote-server
       - uses: actions/upload-artifact@v4
         with:
           name: server
@@ -71,6 +74,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node scripts/ci-version.mjs
+        shell: bash
       - run: npm run dist:${{ matrix.target }}
         env:
           # No code signing yet: Windows will show a SmartScreen warning.
@@ -95,6 +100,7 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       - run: npm ci
+      - run: node scripts/ci-version.mjs
       - run: npm run build
       - name: Signing key (optional, from repository secrets)
         env:
@@ -193,3 +199,27 @@ jobs:
             artifacts/*
             install-linux.sh
           generate_release_notes: true
+
+  # Push to dev: replace the rolling "dev" pre-release (tag "dev" moved to this commit).
+  release-dev:
+    if: github.ref == 'refs/heads/dev'
+    needs: [server, desktop, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish the dev pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node scripts/ci-version.mjs | sed -n 's/^REPRONOTE_VERSION=//p')
+          gh release delete dev --cleanup-tag --yes || true
+          git push origin :refs/tags/dev || true
+          gh release create dev artifacts/* install-linux.sh \
+            --prerelease --target "$GITHUB_SHA" --title "Dev $VERSION" \
+            --notes "Version de développement $VERSION (branche dev, commit ${GITHUB_SHA::7}), reconstruite à chaque modification. Peut être instable : la version stable est la dernière release normale."
