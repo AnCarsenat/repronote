@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import type { BrowserDriver, DriverPage } from "./browser-driver.ts";
+import { loadSessionCookies, saveSessionCookies } from "./session-cookies.ts";
 
 /** Playwright + the system's Chromium, with a persistent profile. */
 export const playwrightDriver: BrowserDriver = {
@@ -11,6 +12,13 @@ export const playwrightDriver: BrowserDriver = {
       executablePath: process.env.CHROMIUM_PATH ?? "/usr/bin/chromium",
       viewport: interactive ? null : { width: 420, height: 900 },
     });
+    // The ENT's session cookies from the last run (a closed browser forgets them).
+    const saved = await loadSessionCookies();
+    if (saved.length) {
+      const present = new Set((await context.cookies()).map((c) => `${c.domain}|${c.path}|${c.name}`));
+      await context.addCookies(saved.filter((c) => !present.has(`${c.domain}|${c.path}|${c.name}`))).catch((err) =>
+        console.error(`[login] could not restore ENT session cookies: ${err instanceof Error ? err.message : err}`));
+    }
     const page = await context.newPage();
     for (const other of context.pages()) if (other !== page) await other.close().catch(() => {});
     const submittedOn = new Set<string>();
@@ -57,6 +65,12 @@ export const playwrightDriver: BrowserDriver = {
         await writeFile(path, await page.screenshot({ fullPage: true }));
       },
       async close() {
+        try {
+          const session = (await context.cookies()).filter((c) => c.expires === -1);
+          await saveSessionCookies(session.map(({ name, value, domain, path, secure, httpOnly, sameSite }) => ({ name, value, domain, path, secure, httpOnly, sameSite })));
+        } catch {
+          // Browser already gone (window closed by the user): keep the last saved ones.
+        }
         await context.close().catch(() => {});
       },
     };

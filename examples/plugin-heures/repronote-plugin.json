@@ -1,0 +1,8 @@
+{
+  "name": "Heures par matière",
+  "description": "Combien d'heures de cours par matière sur les semaines synchronisées, avec export CSV.",
+  "version": "1.0.0",
+  "entry": "plugin.js",
+  "permissions": ["timetable", "download"],
+  "icon": "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 7v5l3 2"
+}

@@ -4,7 +4,13 @@
 //   dist/mcp.mjs            MCP over stdio for AI assistants (talks to a running server)
 //   dist/android.mjs        the Android app's backend (embedded Node 18, see android/)
 // The web UI (web/) needs no build: it is served as is, next to dist/.
+import { readFileSync } from "node:fs";
 import { build } from "esbuild";
+
+// Version and release channel baked into the bundles (see src/core/version.ts).
+// CI sets REPRONOTE_VERSION (e.g. 0.4.0-dev.12) and REPRONOTE_CHANNEL=dev for dev builds.
+const version = process.env.REPRONOTE_VERSION || JSON.parse(readFileSync("package.json", "utf8")).version;
+const channel = process.env.REPRONOTE_CHANNEL === "dev" || /-dev\./.test(version) ? "dev" : "stable";
 
 const common = {
   bundle: true,
@@ -17,7 +23,9 @@ const common = {
   banner: { js: 'import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);' },
   // Playwright is only used by the server (and loaded lazily); Electron is provided by Electron.
   external: ["playwright-core", "electron"],
+  define: { __REPRONOTE_VERSION__: JSON.stringify(version), __REPRONOTE_CHANNEL__: JSON.stringify(channel) },
 };
+console.log(`repronote ${version} (${channel})`);
 
 await build({ ...common, entryPoints: ["src/serve.ts"], outfile: "dist/server.mjs" });
 await build({ ...common, entryPoints: ["src/electron/main.ts"], outfile: "dist/electron-main.mjs" });

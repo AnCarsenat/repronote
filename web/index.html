@@ -12,8 +12,13 @@
       const r = document.documentElement;
       if (s.theme === "light" || s.theme === "dark") r.dataset.theme = s.theme;
       if (s.textSize === "small" || s.textSize === "large") r.dataset.text = s.textSize;
-      if (s.density === "compact") r.dataset.density = "compact";
+      if (s.density === "compact" || s.density === "ultra") r.dataset.density = s.density;
       if (s.reduceMotion) r.dataset.motion = "reduce";
+      if (s.colorblind) r.dataset.colorblind = "on";
+      const fonts = { legible: '"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, "DejaVu Sans", Tahoma, sans-serif', rounded: 'ui-rounded, "SF Pro Rounded", Nunito, "Varela Round", Quicksand, Comfortaa, system-ui, sans-serif', serif: 'Charter, "Bitstream Charter", "Iowan Old Style", Georgia, "Noto Serif", "DejaVu Serif", serif', dyslexia: 'OpenDyslexic, Lexend, "Comic Neue", "Comic Sans MS", sans-serif', mono: 'ui-monospace, "Cascadia Code", "JetBrains Mono", "Fira Code", Menlo, Consolas, "DejaVu Sans Mono", monospace' };
+      const custom = s.font === "custom" && String(s.customFont || "").replace(/[^\p{L}\p{N} _-]/gu, "").trim();
+      const stack = custom ? `"${custom}", system-ui, sans-serif` : fonts[s.font];
+      if (stack) r.style.setProperty("--font", stack);
       const t = s.accent && JSON.parse(localStorage.getItem("repronote:accent-tokens") || "null");
       if (t) {
         r.dataset.accent = "custom";
@@ -35,7 +40,7 @@
   <div id="banner" class="banner" hidden></div>
   <main id="view" class="view"></main>
   <footer class="footer muted small">
-    <a href="/api/export">Exporter toutes mes données (JSON)</a> · <a href="#/settings">Réglages</a>
+    <a href="/api/export" download>Exporter toutes mes données (JSON)</a> · <a href="/api/documents.zip" download>Tous mes documents (ZIP)</a> · <a href="#/settings">Réglages</a>
   </footer>
   <script type="module" src="/app.js"></script>
 </body>

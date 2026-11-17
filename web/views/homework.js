@@ -92,7 +92,7 @@ export default {
       .filter(bySubject)
       .filter((a) => (backward ? a.deadline < addDays(today, 1) && a.done : a.deadline >= today && (filter === "all" || !a.done)))
       .sort((a, b) => (backward ? b.deadline - a.deadline : a.deadline - b.deadline));
-    const left = all.filter((a) => a.deadline >= today && !a.done).length;
+    const left = all.filter((a) => a.deadline >= today && !a.done && bySubject(a)).length;
 
     const loadedEdge = backward ? backwardFrom ?? addDays(today, -14) : forwardUntil ?? addDays(today, 35);
     const finished = backward ? loadedEdge <= first : loadedEdge >= last;

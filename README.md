@@ -3,9 +3,10 @@
 <p align="center"><b>Pronote, en mieux.</b> Plus clair, plus rapide, et ça marche même sans internet.</p>
 
 <p align="center">
-  <a href="https://github.com/AnCarsenat/repronote/releases/latest"><b>⬇ Télécharger</b></a> ·
+  <a href="https://ancarsenat.github.io/repronote/"><b>⬇ Télécharger</b></a> ·
   <a href="#installer-en-2-minutes">Installer</a> ·
-  <a href="#guide-détaillé">Guide détaillé</a>
+  <a href="#guide-détaillé">Guide détaillé</a> ·
+  <a href="docs/README.md">Documentation</a>
 </p>
 
 <p align="center"><img src="docs/screenshots/accueil.png" alt="L'accueil de repronote : prochain cours, devoirs à faire, dernières notes, évaluations à venir, charge de travail" width="900"></p>
@@ -18,12 +19,16 @@
 - **Emploi du temps lisible**, avec les heures de trou, les cours annulés et les évaluations. Touchez un cours pour voir la salle et le professeur.
 - **Devoirs à cocher**, dans une liste qui défile jusqu'à la fin de l'année, et un graphique de la charge de travail.
 - **Vraie moyenne générale** : coefficients des matières, bonus, préréglages bac et brevet.
-- **Calculateurs** : bac, brevet… et « où gagner des points » : quelle matière ferait le plus monter votre moyenne générale.
+- **Plugins** : les **calculateurs** (bac, brevet, « où gagner des points »), l'**emploi du temps partagé** (échangez vos emplois du temps avec vos amis : qui est en cours, quand vous êtes libres ensemble, export PDF / HTML / agenda), et des plugins et widgets de la communauté installés depuis GitHub, chacun dans un bac à sable.
+- **Widget Note** sur l'accueil, en Markdown simple mis en forme pendant la frappe.
 - **Statistiques** : évolution de la moyenne, matière par matière.
+- **Exports** : emploi du temps en PDF, tous vos documents (bulletins, casier, pièces jointes) en un ZIP, toutes vos données en JSON.
 - **Notifications** : nouvelle note, nouveau devoir, information, cours annulé — sur l'ordinateur, le téléphone, ou dans un salon **Discord** (webhooks).
 - **Tout le reste de Pronote** : informations (à marquer comme lues), carnet (absences, retards, punitions), contenus de cours, documents et bulletins, annuaire des professeurs.
 - **Hors ligne** : tout est gardé sur votre appareil, vous pouvez consulter sans réseau.
-- **Thème sombre**, onglets à masquer, taille du texte… dans les Réglages.
+- **À votre goût** : thème sombre, couleur, police, taille du texte, densité (jusqu'à ultra-compacte), **mode daltonien**, onglets à masquer.
+- **Mises à jour** : repronote vous prévient quand une nouvelle version sort (canal stable ou dev), sur toutes les plateformes.
+- **Inviter des amis** : un message tout prêt avec le lien de téléchargement (et votre code d'emploi du temps).
 
 | | |
 |---|---|
@@ -36,7 +41,7 @@
 
 ## Installer en 2 minutes
 
-Allez sur la **[page de la dernière version](https://github.com/AnCarsenat/repronote/releases/latest)** et prenez le fichier qui correspond à votre appareil :
+Le plus simple : la **[page de téléchargement](https://ancarsenat.github.io/repronote/)** propose directement le bon fichier pour votre appareil. Sinon, sur la **[page de la dernière version](https://github.com/AnCarsenat/repronote/releases/latest)**, prenez le fichier qui correspond à votre appareil :
 
 | Vous avez… | Fichier à prendre | Puis |
 |---|---|---|
@@ -55,6 +60,8 @@ Ensuite :
 C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT vous garde connecté.
 
 > repronote ne garde ni votre mot de passe ni rien d'autre ailleurs que sur votre appareil. C'est un projet indépendant, non affilié à Index Éducation.
+
+**Envie d'essayer les nouveautés avant tout le monde ?** La [version de développement](https://ancarsenat.github.io/repronote/dev/) est reconstruite à chaque modification (elle peut être instable).
 
 **Un problème ?** [Ouvrez un ticket](https://github.com/AnCarsenat/repronote/issues) en décrivant ce que vous avez fait et ce qui s'est affiché.
 
@@ -92,6 +99,19 @@ Il faut **Node.js ≥ 24** et **Chromium** (ou Chrome) pour la connexion à l'EN
 - `repronote-server --stop` arrête le serveur, `repronote-server --foreground` le lance dans le terminal.
 - `bash install-linux.sh --uninstall` désinstalle (vos données restent).
 - Sans sudo, pour vous seul : `PREFIX=~/.local OPT_DIR=~/.local/opt bash install-linux.sh --server`.
+
+## Mises à jour
+
+repronote demande à GitHub, au démarrage puis deux fois par jour, s'il existe une nouvelle version (rien d'autre n'est envoyé ; désactivable dans **Réglages → À propos → Mises à jour**). Si oui, un bandeau propose le bon fichier :
+
+| Vous avez… | Pour mettre à jour |
+|---|---|
+| Android | Téléchargez l'APK et ouvrez-le : il s'installe par-dessus, vos données restent. |
+| Windows | Lancez le nouvel installateur. |
+| Linux (AppImage, .deb) | Téléchargez le nouveau fichier, ou relancez la commande d'installation. |
+| Serveur installé par le script | `repronote-server --update` |
+
+Deux **canaux** : *stable* (les versions publiées, branche `main`) et *dev* (la version en cours, branche `dev`, reconstruite à chaque modification). On en change dans le même réglage. Le script Linux accepte `--dev`.
 
 ## Notifications et webhooks
 
@@ -152,7 +172,7 @@ Quelques données que pawnote ne sait pas (ou plus) lire sont récupérées dire
 
 ## Données et vie privée
 
-Tout reste dans le dossier `data/` (ignoré par git) : base SQLite, profil Chromium (cookies ENT), fichiers. Le serveur écoute **uniquement sur localhost**. Pour l'exposer sur votre réseau : `HOST=0.0.0.0 npm run serve` — attention, toute personne du réseau pourrait alors lire vos données et agir en votre nom.
+Tout reste dans le dossier `data/` (ignoré par git) : base SQLite, profil Chromium (cookies ENT), cookies de session de l'ENT (`ent-session-cookies.json`, pour la reconnexion automatique), fichiers. Seules sorties en dehors de Pronote : la vérification des mises à jour (GitHub, désactivable) et ce que vous installez ou partagez vous-même. Le serveur écoute **uniquement sur localhost**. Pour l'exposer sur votre réseau : `HOST=0.0.0.0 npm run serve` — attention, toute personne du réseau pourrait alors lire vos données et agir en votre nom.
 
 ## API
 
@@ -176,6 +196,11 @@ Le serveur local expose une API JSON. `GET /api` en donne la liste.
 | PUT | `/api/notifications` | Quoi notifier et où — `{ "kinds": { "grade": true, … }, "system": true, "webhooks": [{ "url", "format": "discord" \| "json", "name" }] }` |
 | POST | `/api/notifications/test` | Envoie une notification de test partout |
 | GET | `/api/export` | Toutes les données en un fichier JSON |
+| GET | `/api/documents.zip` | Tous les documents (bulletins, casier, pièces jointes) en un ZIP |
+| PUT | `/api/plugins/:id` | Données d'un plugin (1 Mo max) |
+| POST | `/api/download` | Transforme un contenu généré en téléchargement (`GET /api/download/:id`, 10 min) — utilisé là où les téléchargements `blob:` ne marchent pas (Android) |
+| POST | `/api/update/check` | Vérifier maintenant s'il existe une nouvelle version |
+| PUT | `/api/update/settings` | `{ "enabled": true, "channel": "stable" \| "dev" }` |
 
 Exemple :
 
@@ -197,9 +222,15 @@ repronote expose ses données à un assistant IA via le [Model Context Protocol]
 
 Outils : `get_today`, `get_timetable`, `get_homework`, `set_homework_done`, `get_grades`, `get_news`, `mark_news_read`, `get_notebook`, `get_lesson_contents`, `list_documents`, `sync_now`.
 
-## Écrire un widget
+## Plugins et widgets de la communauté
 
-Un widget est un module dans `web/widgets/`, à ajouter dans `web/widgets/index.js` :
+Dans **Plugins → Installer un plugin / un widget (GitHub)** : la liste des dépôts GitHub publiés avec le sujet `repronote-plugin` ou `repronote-widget`. Avant d'installer, repronote montre l'auteur et les données demandées. Chaque plugin tourne dans un **bac à sable** : sans accès à Internet, à vos identifiants ni au reste de l'application, il ne reçoit que les données acceptées.
+
+Pour en écrire un : **[docs/plugins.md](docs/plugins.md)** (exemples prêts à copier dans [`examples/`](examples)).
+
+## Écrire un widget intégré
+
+Un widget intégré est un module dans `web/widgets/`, à ajouter dans `web/widgets/index.js` :
 
 ```js
 import { h, homeworkList } from "../lib.js";
@@ -211,7 +242,7 @@ export default {
   needs: ["homework"],                 // données lues
   defaults: { jours: 7 },
   settings: [{ key: "jours", label: "Nombre de jours", type: "number", min: 1, max: 30 }],
-  render(data, settings) {             // ne lit que la copie locale : marche hors ligne
+  render(data, settings, ctx) {        // ne lit que la copie locale : marche hors ligne ; ctx.save(patch) enregistre des réglages
     const limite = Date.now() + settings.jours * 864e5;
     const n = homeworkList(data).filter((a) => !a.done && a.deadline < limite).length;
     return h("p", { class: "big" }, String(n));
@@ -225,16 +256,24 @@ Il apparaît dans « + Ajouter un widget », avec ses réglages dans la roue ⚙
 
 ```
 src/
-  core/        connexion (navigateur, reprise de session), requêtes Pronote brutes
+  core/        connexion (navigateur, reprise de session), requêtes Pronote brutes, mises à jour, ZIP
   electron/    application de bureau
+  android/     backend de l'application Android (pont vers Java, pilote DevTools)
   mcp/         serveur MCP (outils pour assistants IA)
-  store/       base SQLite, synchronisation, cache de fichiers
+  notify/      détection des nouveautés, notifications, webhooks
+  store/       base SQLite / JSON, synchronisation, cache de fichiers
   server.ts    serveur HTTP + API
   cli/         npm run login / homework
 web/
-  views/       pages (accueil, emploi du temps, devoirs, notes…)
+  views/       pages (accueil, emploi du temps, devoirs, notes, plugins…)
   widgets/     widgets de l'accueil
+  plugins/     plugins intégrés, installation depuis GitHub, bac à sable
+android/       projet Android (Java, nodejs-mobile)
+site/          page de téléchargement (GitHub Pages)
+docs/          documentation (architecture, plugins, versions)
 ```
+
+Pour contribuer (humains comme assistants IA) : **[AGENTS.md](AGENTS.md)**, puis [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et [docs/releases.md](docs/releases.md).
 
 `npm run typecheck` vérifie les types (Node exécute le TypeScript directement).
 
@@ -250,7 +289,7 @@ web/
 | `node scripts/screenshots.mjs <url> docs/screenshots` | Les captures de ce README |
 | `npm run dist:android` | APK Android (un par architecture) dans `android/app/build/outputs/apk/release/` — demande le SDK Android (avec NDK et CMake) et Java 17+ |
 
-Le workflow GitHub `.github/workflows/build.yml` construit tout à chaque push ; un tag `v1.2.3` publie une Release avec les fichiers.
+Le workflow GitHub `.github/workflows/build.yml` construit tout à chaque push : un push sur `dev` publie la pré-version « dev », un tag `v1.2.3` (sur `main`) publie une version stable. Voir [docs/releases.md](docs/releases.md).
 
 L'application de bureau lance le serveur dans Electron et utilise ses propres fenêtres pour la connexion (pas de Playwright) ; ses données sont dans le profil utilisateur (`~/.config/repronote/data`, `%APPDATA%\repronote\data`).
 

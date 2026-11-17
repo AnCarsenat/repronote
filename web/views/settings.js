@@ -1,10 +1,12 @@
 import { h, formatAgo } from "../lib.js";
 import { store, syncNow, saveLayout, saveNotifications, testNotifications } from "../state.js";
 import { browserNotificationsUsable } from "../notifications.js";
+import { inviteBlock } from "../invite.js";
+import { updateSettingsBlock, consumeOpenAbout } from "../updates.js";
 import { defaultLayout } from "../widgets/index.js";
 import {
   getSettings, setSetting, resetSettings, clearLocalData, orderedViews, isTabHidden,
-  DEFAULT_ACCENT, isHex, accentTokens,
+  DEFAULT_ACCENT, isHex, accentTokens, FONTS, cleanFontName,
 } from "../settings.js";
 
 // Réglages: per-device preferences, grouped in categories. A side menu on
@@ -129,18 +131,37 @@ function appearance(s) {
         h("a", { href: "#/settings", tabindex: "-1", onclick: (e) => e.preventDefault() }, "Un lien")),
     ),
     h("div", { class: "set-group" },
+      h("h3", {}, "Police"),
+      h("div", { class: "font-grid", role: "radiogroup", "aria-label": "Police" },
+        [...FONTS, { value: "custom", label: "Autre…", stack: s.customFont ? `"${cleanFontName(s.customFont)}", system-ui` : null }].map((f) => {
+          const id = `set-font-${f.value}`;
+          return h("label", { class: `font-card ${s.font === f.value ? "on" : ""}`, for: id, style: f.stack ? { "font-family": f.stack } : undefined },
+            h("input", { type: "radio", id, name: "set-font", checked: s.font === f.value, onchange: () => setSetting("font", f.value) }),
+            h("span", { class: "font-sample", "aria-hidden": "true" }, "Aa"),
+            h("span", { class: "font-name" }, f.label));
+        })),
+      s.font === "custom"
+        ? row("Nom de la police", "Une police installée sur cet appareil (par exemple « Inter » ou « Lexend »).",
+            h("input", { id: "set-font-custom", type: "text", maxlength: 60, value: s.customFont, placeholder: "Inter",
+              onchange: (e) => setSetting("customFont", cleanFontName(e.target.value)) }), { id: "set-font-custom" })
+        : null,
+      h("p", { class: "set-hint" }, "Seules les polices installées sur l'appareil sont utilisées (rien n'est téléchargé) ; sinon la police du système les remplace."),
+    ),
+    h("div", { class: "set-group" },
       h("h3", {}, "Lecture"),
       row("Taille du texte", null, segmented("text", s.textSize, [
         { value: "small", label: "Petite" }, { value: "normal", label: "Normale" }, { value: "large", label: "Grande" },
       ], (v) => setSetting("textSize", v))),
-      row("Densité", "Compacte affiche plus d'éléments à l'écran.", segmented("density", s.density, [
-        { value: "comfortable", label: "Confortable" }, { value: "compact", label: "Compacte" },
+      row("Densité", "Compacte et ultra-compacte affichent plus d'éléments à l'écran.", segmented("density", s.density, [
+        { value: "comfortable", label: "Confortable" }, { value: "compact", label: "Compacte" }, { value: "ultra", label: "Ultra" },
       ], (v) => setSetting("density", v))),
       row("Réduire les animations", "Désactive les transitions et effets de mouvement.",
         toggle("set-motion", s.reduceMotion, (v) => setSetting("reduceMotion", v)), { id: "set-motion" }),
+      row("Mode daltonien", "Dans les emplois du temps : un motif par matière ou par personne, les noms toujours écrits, et des couleurs que les daltoniens distinguent.",
+        toggle("set-colorblind", s.colorblind, (v) => setSetting("colorblind", v)), { id: "set-colorblind" }),
     ),
     h("div", { class: "set-foot" },
-      h("button", { type: "button", class: "secondary small-btn", onclick: () => resetSettings(["theme", "accent", "textSize", "density", "reduceMotion"]) },
+      h("button", { type: "button", class: "secondary small-btn", onclick: () => resetSettings(["theme", "accent", "textSize", "density", "reduceMotion", "colorblind", "font", "customFont"]) },
         "Rétablir l'apparence par défaut")),
   ];
 }
@@ -279,6 +300,8 @@ function dataCategory() {
       h("h3", {}, "Données"),
       row("Exporter mes données", "Tout ce que repronote a enregistré, dans un fichier JSON.",
         h("a", { class: "btn-link", href: "/api/export", download: "" }, "Télécharger")),
+      row("Exporter tous mes documents", "Bulletins, casier numérique et pièces jointes des devoirs et informations, dans un fichier ZIP. Les fichiers pas encore enregistrés sont récupérés sur Pronote.",
+        h("a", { class: "btn-link", href: "/api/documents.zip", download: "" }, "Télécharger (ZIP)")),
       row("Vider le cache de ce navigateur", "Efface les réglages de cet appareil (thème, onglets…). Les données Pronote, l'accueil et les coefficients restent sur le serveur local.",
         h("button", { type: "button", class: "secondary small-btn danger", onclick: () => {
           if (confirm("Effacer les réglages enregistrés dans ce navigateur ?")) clearLocalData();
@@ -295,6 +318,11 @@ function about() {
         h("strong", { class: "about-name" }, "repronote"),
         h("span", { class: "set-hint" }, "Une interface alternative pour Pronote, hors ligne, sur votre ordinateur."))),
     h("div", { class: "set-group" },
+      h("h3", {}, "Inviter des amis"),
+      h("p", { class: "set-hint" }, "Envoyez-leur le lien de téléchargement. Pour partager aussi votre emploi du temps, passez par Plugins → Emploi du temps partagé."),
+      inviteBlock(() => rerenderSettings())),
+    updateSettingsBlock(row, toggle, () => rerenderSettings()),
+    h("div", { class: "set-group" },
       row("Code source", null, h("a", { href: REPO, target: "_blank", rel: "noreferrer noopener" }, "github.com/AnCarsenat/repronote")),
       row("Licence", "Logiciel libre : vous pouvez l'utiliser, l'étudier, le modifier et le partager.",
         h("a", { href: `${REPO}/blob/main/LICENSE`, target: "_blank", rel: "noreferrer noopener" }, "GPL-3.0 ou ultérieure")),
@@ -303,7 +331,7 @@ function about() {
     h("div", { class: "set-group privacy" },
       h("h3", {}, "Vie privée"),
       h("p", {}, "Vos données restent sur cet ordinateur : elles sont stockées dans le dossier ", h("code", {}, "data/"),
-        " et le serveur n'écoute que localement. Aucun mot de passe n'est enregistré et rien n'est envoyé ailleurs qu'à Pronote."),
+        " et le serveur n'écoute que localement. Aucun mot de passe n'est enregistré. Rien n'est envoyé ailleurs qu'à Pronote, sauf la question « y a-t-il une nouvelle version ? » posée à GitHub (désactivable ci-dessus) et ce que vous installez ou partagez vous-même."),
     ),
     h("p", { class: "set-hint" }, "Projet indépendant, non affilié à Index Éducation."),
   ];
@@ -410,7 +438,7 @@ const CATEGORIES = [
   { id: "home", title: "Accueil", hint: "Widgets", render: homeCategory },
   { id: "notifications", title: "Notifications", hint: "Alertes, webhooks Discord", render: notificationsCategory },
   { id: "data", title: "Synchronisation & données", hint: "Actualiser, exporter, cache", render: dataCategory },
-  { id: "about", title: "À propos", hint: "Licence, vie privée", render: about },
+  { id: "about", title: "À propos", hint: "Mises à jour, inviter des amis, licence", render: about },
 ];
 
 export default {
@@ -419,6 +447,7 @@ export default {
 
   render(_data, rerender) {
     rerenderSettings = rerender;
+    if (consumeOpenAbout()) open = "about";
     const s = getSettings();
     const select = (id) => {
       open = id;
