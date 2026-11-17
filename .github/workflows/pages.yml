@@ -1,0 +1,54 @@
+# Download pages on GitHub Pages, one per channel, from each branch's site/:
+#   https://ancarsenat.github.io/repronote/      <- main (stable releases)
+#   https://ancarsenat.github.io/repronote/dev/  <- dev  (the "dev" pre-release)
+# Rebuilt when either branch changes its site (or the screenshots).
+name: pages
+
+on:
+  push:
+    branches: [main, dev]
+    paths: ["site/**", "docs/screenshots/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: dev
+        continue-on-error: true # no dev branch yet: stable page only
+      - name: Assemble
+        run: |
+          mkdir -p _site
+          cp -r main/site/. _site/
+          cp -r main/docs/screenshots _site/screenshots
+          if [ -d dev/site ]; then
+            mkdir -p _site/dev
+            cp -r dev/site/. _site/dev/
+            cp -r dev/docs/screenshots _site/dev/screenshots
+          fi
+          find _site -maxdepth 2 | sort
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

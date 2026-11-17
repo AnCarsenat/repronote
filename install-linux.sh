@@ -9,7 +9,9 @@
 #              and Chromium/Chrome for the login)                            -> /opt/repronote-server
 #              add --autostart to start it with your session (keeps notifications and webhooks running)
 #   PREFIX=~/.local OPT_DIR=~/.local/opt bash install-linux.sh …   installs for you only, without sudo
+#   --dev      the development version (pre-release rebuilt from the dev branch) instead of the stable one
 # Without a choice, the script asks (or installs the app when it can't ask).
+# Run it again to update (or `repronote-server --update` for the server).
 #   --uninstall   removes both
 set -euo pipefail
 
@@ -26,6 +28,7 @@ UNIT="$HOME/.config/systemd/user/repronote.service"
 
 mode=""
 autostart=""
+channel="stable"
 for arg in "$@"; do
   case "$arg" in
     --app) mode="app" ;;
@@ -33,7 +36,9 @@ for arg in "$@"; do
     --autostart) autostart="yes" ;;
     --no-autostart) autostart="no" ;;
     --uninstall) mode="uninstall" ;;
-    -h|--help) sed -n '2,13p' "$0" 2>/dev/null || true; exit 0 ;;
+    --dev) channel="dev" ;;
+    --stable) channel="stable" ;;
+    -h|--help) sed -n '2,15p' "$0" 2>/dev/null || true; exit 0 ;;
     *) echo "Option inconnue : $arg (voir --help)" >&2; exit 2 ;;
   esac
 done
@@ -98,15 +103,24 @@ if [[ -n "$SUDO" ]]; then
   sudo -v || die "impossible d'obtenir les droits administrateur."
 fi
 
-# The file names contain the version: find the latest one from the release redirect.
-TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")"
-TAG="${TAG##*/}"
-VERSION="${TAG#v}"
-[[ -n "$VERSION" && "$VERSION" != "latest" ]] || die "impossible de trouver la dernière version."
+# The file names contain the version: read them from the release (stable: the
+# latest release; dev: the rolling "dev" pre-release).
+if [[ "$channel" == "dev" ]]; then API_URL="https://api.github.com/repos/$REPO/releases/tags/dev"; else API_URL="https://api.github.com/repos/$REPO/releases/latest"; fi
+RELEASE_JSON="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API_URL")" || die "impossible de lire la dernière version sur GitHub."
+TAG="$(printf '%s' "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+VERSION="$(printf '%s' "$RELEASE_JSON" | grep -o '"name": *"[^"]*"' | head -1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+\(-dev\.[0-9]\+\)\?' || true)"
+VERSION="${VERSION:-${TAG#v}}"
+[[ -n "$TAG" ]] || die "impossible de trouver la dernière version."
+asset_url() { printf '%s' "$RELEASE_JSON" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/.*"\(https[^"]*\)"$/\1/' | grep -E "$1" | head -1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-download() { curl -fL --progress-bar -o "$TMP/$1" "https://github.com/$REPO/releases/download/$TAG/$1"; }
+download() { # pattern, local name
+  local url
+  url="$(asset_url "$1")"
+  [[ -n "$url" ]] || die "fichier introuvable dans la version $VERSION ($1)."
+  curl -fL --progress-bar -o "$TMP/$2" "$url"
+}
 
 curl -fsSL -o "$TMP/icon.png" "https://raw.githubusercontent.com/$REPO/$TAG/build/icon.png" || true
 if [[ -s "$TMP/icon.png" ]]; then $SUDO install -Dm644 "$TMP/icon.png" "$ICON"; fi
@@ -126,16 +140,16 @@ ENTRY
 }
 
 if [[ "$mode" == "app" ]]; then
-  FILE="repronote-$VERSION-linux-x86_64.AppImage"
+  FILE="repronote.AppImage"
   say "Téléchargement de l'application repronote $VERSION…"
-  download "$FILE"
+  download '\.AppImage$' "$FILE"
   $SUDO install -Dm755 "$TMP/$FILE" "$APP_BIN"
   desktop_entry repronote.desktop "repronote" "Une interface alternative pour Pronote" "$APP_BIN %U"
   done_msg="repronote $VERSION est installé. Lancez-le depuis le menu des applications ou avec la commande « repronote »."
 else
-  FILE="repronote-server-$TAG.zip"
+  FILE="repronote-server.zip"
   say "Téléchargement du serveur repronote $VERSION…"
-  download "$FILE"
+  download '/repronote-server-[^/]*\.zip$' "$FILE"
   mkdir "$TMP/x"
   if command -v unzip >/dev/null; then unzip -q "$TMP/$FILE" -d "$TMP/x"
   elif command -v python3 >/dev/null; then python3 -m zipfile -e "$TMP/$FILE" "$TMP/x"
@@ -153,8 +167,10 @@ else
   [[ -z "$chromium" ]] || chromium_line="export CHROMIUM_PATH=\"\${CHROMIUM_PATH:-$chromium}\""
   $SUDO tee "$SERVER_BIN" >/dev/null <<LAUNCHER
 #!/usr/bin/env bash
-# repronote (server): repronote-server [--foreground | --stop]
+# repronote (server): repronote-server [--foreground | --stop | --update]
 set -euo pipefail
+export REPRONOTE_PLATFORM=server-installed
+export REPRONOTE_CHANNEL="\${REPRONOTE_CHANNEL:-$channel}"
 export REPRONOTE_DATA_DIR="\${REPRONOTE_DATA_DIR:-\${XDG_DATA_HOME:-\$HOME/.local/share}/repronote}"
 export PORT="\${PORT:-4173}"
 $chromium_line
@@ -166,6 +182,11 @@ case "\${1:-}" in
   --foreground) exec node "$SERVER_DIR/dist/server.mjs" ;;
   --stop)
     if [[ -f "\$STATE/server.pid" ]]; then kill "\$(cat "\$STATE/server.pid")" 2>/dev/null || true; rm -f "\$STATE/server.pid"; fi
+    exit 0 ;;
+  --update)
+    # Same installer, same choices (server, channel); the server restarts after.
+    curl -fsSL "https://github.com/$REPO/releases/latest/download/install-linux.sh" | bash -s -- --server --no-autostart \$([[ "\$REPRONOTE_CHANNEL" == dev ]] && echo --dev)
+    systemctl --user try-restart repronote.service 2>/dev/null || true
     exit 0 ;;
 esac
 if ! running; then
