@@ -18,11 +18,16 @@
       :root { --bg: #111116; --card: #1b1b23; --text: #ececf1; --muted: #a0a0b4; --border: #2c2c38; --accent: #8b8bf0; --accent-2: #a5a5f5; --accent-soft: #26264a; --accent-text: #111116; --good: #5fd08f; }
     }
     * { box-sizing: border-box; }
+    img { max-width: 100%; height: auto; }
     html { scroll-behavior: smooth; }
-    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; position: relative; overflow-x: hidden; }
+    body::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 760px; z-index: -1; pointer-events: none;
+      background: radial-gradient(600px 380px at 85% 10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+                  radial-gradient(520px 340px at 5% 30%, color-mix(in srgb, #1baf7a 14%, transparent), transparent 70%); }
     a { color: var(--accent); }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
-    header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; }
+    .topbar { position: sticky; top: 0; z-index: 20; backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+    header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: var(--text); text-decoration: none; }
     .brand img { width: 34px; height: 34px; }
     .top nav { display: flex; gap: 18px; font-size: 0.95rem; }
@@ -40,9 +45,31 @@
     .btn small { font-weight: 450; opacity: .85; }
     .btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
     .hint { color: var(--muted); font-size: 0.88rem; margin-top: 12px; }
-    .shot { position: relative; }
-    .shot img { width: 100%; border-radius: 14px; border: 1px solid var(--border); box-shadow: 0 24px 60px rgba(30, 30, 80, .18); display: block; }
-    .shot .phone { position: absolute; width: 30%; right: -4%; bottom: -12%; border-radius: 18px; border: 4px solid var(--card); box-shadow: 0 16px 40px rgba(30, 30, 80, .28); }
+    .shot { position: relative; padding-bottom: 8%; }
+    .frame { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: var(--card); box-shadow: 0 30px 70px rgba(30, 30, 80, .20), 0 2px 6px rgba(30, 30, 80, .08); transform: perspective(1600px) rotateY(-4deg) rotateX(2deg); transform-origin: left center; }
+    .frame-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 60%, var(--card)); }
+    .frame-bar i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
+    .frame-bar i:nth-child(2) { background: #febc2e; } .frame-bar i:nth-child(3) { background: #28c840; }
+    .frame-bar span { margin-left: 10px; font-size: 0.75rem; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 2px 10px; }
+    .frame img { display: block; width: 100%; height: auto; aspect-ratio: 1360 / 860; object-fit: cover; object-position: top; }
+    .shot .phone { position: absolute; width: 27%; right: -3%; bottom: 0; height: auto; aspect-ratio: 390 / 800; object-fit: cover; object-position: top; border-radius: 22px; border: 5px solid #1c1c24; box-shadow: 0 20px 50px rgba(30, 30, 80, .32); }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
+    .pills li { font-size: 0.85rem; font-weight: 600; padding: 4px 12px; border-radius: 99px; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+    .pills li::before { content: "✓ "; color: var(--good); }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; counter-reset: step; }
+    .step { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 18px 18px; position: relative; }
+    .step::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-weight: 700; margin-bottom: 10px; }
+    .step b { display: block; margin-bottom: 4px; }
+    .step p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .gallery button { all: unset; cursor: zoom-in; display: block; width: 100%; }
+    .gallery button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 14px; }
+    .gallery figure { transition: transform .15s, box-shadow .15s; }
+    .gallery figure:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(30, 30, 80, .14); }
+    dialog.zoom { border: 0; padding: 0; background: transparent; max-width: min(1200px, 94vw); }
+    dialog.zoom::backdrop { background: rgba(10, 10, 20, .75); }
+    dialog.zoom img { display: block; max-width: 100%; max-height: 84vh; width: auto; height: auto; margin: 0 auto; border-radius: 12px; }
+    dialog.zoom form { text-align: center; margin-top: 10px; }
+    dialog.zoom button { font: inherit; border: 0; border-radius: 8px; padding: 6px 14px; background: var(--card); color: var(--text); cursor: pointer; }
 
     section { padding: 48px 0; }
     h2 { font-size: 1.7rem; margin: 0 0 8px; letter-spacing: -0.01em; }
@@ -81,14 +108,15 @@
 
     @media (max-width: 860px) {
       .hero { grid-template-columns: 1fr; padding-top: 12px; gap: 48px; }
-      .shot .phone { right: 2%; }
+      .shot .phone { right: 2%; width: 30%; }
+      .frame { transform: none; }
       .top nav { display: none; }
     }
-    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn, .gallery figure { transition: none; } .frame { transform: none; } }
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="topbar"><div class="wrap">
     <header class="top">
       <a class="brand" href="#"><img src="icon.svg" alt="">repronote</a>
       <nav aria-label="Sections">
@@ -99,6 +127,8 @@
         <a id="channel-link" href="dev/">Version de dev</a>
       </nav>
     </header>
+  </div></div>
+  <div class="wrap">
 
     <main>
       <p class="dev-banner" id="dev-banner" hidden>Vous êtes sur la page de la <strong>version de développement</strong> : les nouveautés en avance, reconstruites à chaque modification, parfois instables. <a href="../">Version stable →</a></p>
@@ -106,6 +136,7 @@
         <div>
           <h1>Pronote,<br><span>en mieux.</span></h1>
           <p class="lead">Emploi du temps, notes et devoirs enfin lisibles, des notifications quand une note tombe, et l'emploi du temps partagé pour voir quand vous êtes libres avec vos amis. Gratuit, sans pub, et vos données restent chez vous.</p>
+          <ul class="pills"><li>Gratuit</li><li>Sans pub</li><li>Logiciel libre</li><li>Marche hors ligne</li><li>Sans compte</li></ul>
           <div class="cta">
             <a class="btn" id="main-dl" href="#telecharger">
               <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
@@ -116,8 +147,11 @@
           <p class="hint" id="main-dl-hint">Android, Windows et Linux. Logiciel libre (GPL-3.0).</p>
         </div>
         <div class="shot">
-          <img src="screenshots/accueil.png" alt="L'accueil de repronote : cours du jour, devoirs, dernières notes" width="1360" height="860">
-          <img class="phone" src="screenshots/mobile.png" alt="repronote sur téléphone" loading="lazy">
+          <div class="frame">
+            <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>repronote</span></div>
+            <img src="screenshots/accueil.png" alt="L'accueil de repronote : cours du jour, devoirs, dernières notes" width="1360" height="860" fetchpriority="high">
+          </div>
+          <img class="phone" src="screenshots/mobile.png" alt="repronote sur téléphone" width="390" height="800" loading="lazy">
         </div>
       </div>
 
@@ -133,6 +167,16 @@
           <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zM12 22V12M21 7l-9 5-9-5"/></svg></div><b>Plugins</b><p>Calculateurs du bac et du brevet, et des plugins de la communauté, dans un bac à sable.</p></div>
           <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><b>Vie privée</b><p>Pas de compte, pas de serveur : tout reste sur votre téléphone ou votre ordinateur.</p></div>
           <div class="feature"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div><b>Vos données</b><p>Exportez tout en JSON, et tous vos documents (bulletins, casier) d'un coup en ZIP.</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Prêt en 2 minutes</h2>
+        <p class="sub">Rien à configurer, pas de compte à créer.</p>
+        <div class="steps">
+          <div class="step"><b>Téléchargez</b><p>L'application pour votre appareil, juste en dessous.</p></div>
+          <div class="step"><b>Collez l'adresse de Pronote</b><p>Celle de la page Pronote de votre établissement (copiée depuis votre navigateur).</p></div>
+          <div class="step"><b>Connectez-vous comme d'habitude</b><p>Par l'ENT ou Pronote. Ensuite, repronote se reconnecte tout seul.</p></div>
         </div>
       </section>
 
@@ -171,11 +215,11 @@
         <h2>En images</h2>
         <p class="sub">Captures faites avec des données fictives.</p>
         <div class="gallery">
-          <figure><img src="screenshots/emploi-du-temps.png" alt="Emploi du temps de la semaine" loading="lazy"><figcaption>Emploi du temps</figcaption></figure>
-          <figure><img src="screenshots/notes.png" alt="Notes par matière" loading="lazy"><figcaption>Notes et moyennes</figcaption></figure>
-          <figure><img src="screenshots/statistiques.png" alt="Statistiques" loading="lazy"><figcaption>Statistiques</figcaption></figure>
-          <figure><img src="screenshots/devoirs.png" alt="Devoirs" loading="lazy"><figcaption>Devoirs</figcaption></figure>
-          <figure><img src="screenshots/sombre.png" alt="Thème sombre" loading="lazy"><figcaption>Thème sombre</figcaption></figure>
+          <figure><button type="button" data-zoom="screenshots/emploi-du-temps.png" aria-label="Agrandir : Emploi du temps"><img src="screenshots/emploi-du-temps.png" alt="Emploi du temps de la semaine" width="1360" height="860" loading="lazy"></button><figcaption>Emploi du temps</figcaption></figure>
+          <figure><button type="button" data-zoom="screenshots/notes.png" aria-label="Agrandir : Notes et moyennes"><img src="screenshots/notes.png" alt="Notes par matière" width="1360" height="860" loading="lazy"></button><figcaption>Notes et moyennes</figcaption></figure>
+          <figure><button type="button" data-zoom="screenshots/statistiques.png" aria-label="Agrandir : Statistiques"><img src="screenshots/statistiques.png" alt="Statistiques" width="1360" height="860" loading="lazy"></button><figcaption>Statistiques</figcaption></figure>
+          <figure><button type="button" data-zoom="screenshots/devoirs.png" aria-label="Agrandir : Devoirs"><img src="screenshots/devoirs.png" alt="Devoirs" width="1360" height="860" loading="lazy"></button><figcaption>Devoirs</figcaption></figure>
+          <figure><button type="button" data-zoom="screenshots/sombre.png" aria-label="Agrandir : Thème sombre"><img src="screenshots/sombre.png" alt="Thème sombre" width="1360" height="860" loading="lazy"></button><figcaption>Thème sombre</figcaption></figure>
         </div>
       </section>
 
@@ -189,6 +233,7 @@
       </section>
     </main>
   </div>
+  <dialog class="zoom" id="zoom"><img alt=""><form method="dialog"><button>Fermer</button></form></dialog>
   <footer>
     <div class="wrap">
       <span>repronote — logiciel libre (GPL-3.0). Projet indépendant, non affilié à Index Éducation.</span>
@@ -240,6 +285,16 @@
         if (main) document.getElementById("main-dl").href = main.browser_download_url;
       })
       .catch(() => (document.getElementById("version").textContent = DEV ? "pas encore de version de dev publiée" : "voir la page des versions"));
+    const zoom = document.getElementById("zoom");
+    for (const b of document.querySelectorAll("[data-zoom]")) {
+      b.addEventListener("click", () => {
+        const img = zoom.querySelector("img");
+        img.src = b.dataset.zoom;
+        img.alt = b.querySelector("img").alt;
+        zoom.showModal();
+      });
+    }
+    zoom.addEventListener("click", (e) => e.target === zoom && zoom.close());
     for (const b of document.querySelectorAll("[data-copy]")) {
       b.addEventListener("click", async () => {
         try {
