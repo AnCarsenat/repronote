@@ -25,6 +25,13 @@ export async function flushPending(session: pronote.SessionHandle, store: Store)
 }
 
 /**
+ * A little helper to verify is the session expired
+ */
+function isSessionExpiredError(err: unknown): boolean {
+  return err instanceof pronote.SessionExpiredError;
+}
+
+/**
  * Fetches everything the UI shows and saves it in the store.
  * Each kind is fetched separately so one failure doesn't lose the others.
  * Returns the kinds that failed.
@@ -37,6 +44,8 @@ export async function syncAll(session: pronote.SessionHandle, store: Store): Pro
   try {
     await flushPending(session, store);
   } catch (err) {
+    // If this is a an expired sessions, buble it upwards
+    if (isSessionExpiredError(err)) throw err;
     failures.pending = err instanceof Error ? err.message : String(err);
   }
 
@@ -190,6 +199,8 @@ export async function syncAll(session: pronote.SessionHandle, store: Store): Pro
     try {
       store.put(kind, await fetch());
     } catch (err) {
+      // If the session expired then bubble it upwards
+      if (isSessionExpiredError(err)) throw err;
       failures[kind] = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     }
   }
