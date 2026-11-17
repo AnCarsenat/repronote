@@ -25,6 +25,13 @@ export async function flushPending(session: pronote.SessionHandle, store: Store)
 }
 
 /**
+ * A little helper to verify is the session expired
+ */
+function isSessionExpiredError(err: unknown): boolean {
+  return err instanceof pronote.SessionExpiredError;
+}
+
+/**
  * Fetches everything the UI shows and saves it in the store.
  * Each kind is fetched separately so one failure doesn't lose the others.
  * Returns the kinds that failed.
