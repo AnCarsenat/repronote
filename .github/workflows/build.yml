@@ -28,7 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Check web modules
-        run: for f in web/*.js web/views/*.js web/widgets/*.js web/plugins/*.js; do node --check "$f"; done
+        run: find web -name '*.js' -print0 | xargs -0 -n1 node --check
 
   server:
     needs: check
