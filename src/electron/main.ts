@@ -6,6 +6,12 @@ import { app, BrowserWindow, Notification, shell } from "electron";
 // Data goes in the user profile (e.g. ~/.config/repronote/data, %APPDATA%\repronote\data).
 // Must be set before the server module loads: it reads it at import time.
 process.env.REPRONOTE_DATA_DIR ??= join(app.getPath("userData"), "data");
+// Which download to offer when an update is out (see src/core/updates.ts).
+process.env.REPRONOTE_PLATFORM ??=
+  process.platform === "win32" ? "desktop-windows"
+  : process.env.APPIMAGE ? "desktop-appimage"
+  : process.platform === "linux" && app.getPath("exe").startsWith("/opt/") ? "desktop-deb"
+  : process.platform === "linux" ? "desktop-linux" : `desktop-${process.platform}`;
 
 // Windows shows notifications only for apps with this id (the installer's appId).
 if (process.platform === "win32") app.setAppUserModelId("io.github.ancarsenat.repronote");

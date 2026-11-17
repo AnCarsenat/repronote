@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { BrowserWindow, session as electronSession } from "electron";
 import type { BrowserDriver, DriverPage, DriverResponse } from "../core/browser-driver.ts";
+import { loadSessionCookies, saveSessionCookies } from "../core/session-cookies.ts";
 
 /**
  * Login through Electron's own browser windows (no Playwright, no system
@@ -9,8 +10,42 @@ import type { BrowserDriver, DriverPage, DriverResponse } from "../core/browser-
  */
 const PARTITION = "persist:pronote-login";
 
+// The ENT's session cookies survive between windows, not app restarts: put
+// back the ones saved last time, once per run (see core/session-cookies.ts).
+let restored = false;
+const SAME_SITE_IN = { Strict: "strict", Lax: "lax", None: "no_restriction" } as const;
+const SAME_SITE_OUT: Record<string, "Strict" | "Lax" | "None" | undefined> = { strict: "Strict", lax: "Lax", no_restriction: "None" };
+
+async function restoreCookies() {
+  if (restored) return;
+  restored = true;
+  const cookies = electronSession.fromPartition(PARTITION).cookies;
+  for (const c of await loadSessionCookies()) {
+    const host = c.domain.replace(/^\./, "");
+    await cookies.set({
+      url: `https://${host}${c.path || "/"}`,
+      name: c.name,
+      value: c.value,
+      domain: c.domain.startsWith(".") ? c.domain : undefined,
+      path: c.path,
+      secure: c.secure,
+      httpOnly: c.httpOnly,
+      sameSite: c.sameSite ? SAME_SITE_IN[c.sameSite] : "unspecified",
+    }).catch(() => {});
+  }
+}
+
+async function saveCookies() {
+  const all = await electronSession.fromPartition(PARTITION).cookies.get({});
+  await saveSessionCookies(all.filter((c) => c.session).map((c) => ({
+    name: c.name, value: c.value, domain: c.hostOnly ? (c.domain ?? "").replace(/^\./, "") : c.domain ?? "", path: c.path ?? "/",
+    secure: Boolean(c.secure), httpOnly: Boolean(c.httpOnly), sameSite: SAME_SITE_OUT[c.sameSite ?? ""],
+  })));
+}
+
 export const electronDriver: BrowserDriver = {
   async openPage({ interactive }) {
+    await restoreCookies();
     const win = new BrowserWindow({
       show: interactive,
       width: 520,
@@ -77,6 +112,7 @@ export const electronDriver: BrowserDriver = {
         if (!win.isDestroyed()) await writeFile(path, (await wc.capturePage()).toPNG());
       },
       async close() {
+        await saveCookies().catch(() => {});
         if (win.isDestroyed()) return;
         try {
           dbg.detach();

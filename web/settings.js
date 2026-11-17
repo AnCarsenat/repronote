@@ -12,8 +12,11 @@ export const DEFAULTS = Object.freeze({
   theme: "auto", // "auto" | "light" | "dark"
   accent: null, // null = default indigo, else "#rrggbb"
   textSize: "normal", // "small" | "normal" | "large"
-  density: "comfortable", // "comfortable" | "compact"
+  density: "comfortable", // "comfortable" | "compact" | "ultra"
   reduceMotion: false,
+  colorblind: false, // patterns + labels in the timetables, colour-blind-safe palette
+  font: "system", // key of FONTS, or "custom" (customFont)
+  customFont: "",
   tabOrder: [], // view ids; views not listed keep their default place at the end
   hiddenTabs: [],
   startPage: "home",
@@ -139,6 +142,26 @@ export function accentTokens(hex) {
   };
 }
 
+// ---- Font ----
+/** Font families installed on most systems (no download: the app works offline). */
+export const FONTS = [
+  { value: "system", label: "Système", stack: null },
+  { value: "legible", label: "Très lisible", stack: '"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, "DejaVu Sans", Tahoma, sans-serif' },
+  { value: "rounded", label: "Arrondie", stack: 'ui-rounded, "SF Pro Rounded", Nunito, "Varela Round", Quicksand, Comfortaa, system-ui, sans-serif' },
+  { value: "serif", label: "Serif", stack: 'Charter, "Bitstream Charter", "Iowan Old Style", Georgia, "Noto Serif", "DejaVu Serif", serif' },
+  { value: "dyslexia", label: "Dyslexie", stack: 'OpenDyslexic, Lexend, "Comic Neue", "Comic Sans MS", sans-serif' },
+  { value: "mono", label: "Chasse fixe", stack: 'ui-monospace, "Cascadia Code", "JetBrains Mono", "Fira Code", Menlo, Consolas, "DejaVu Sans Mono", monospace' },
+];
+/** A font name typed by the user: letters, digits, spaces and dashes only. */
+export const cleanFontName = (v) => String(v ?? "").replace(/[^\p{L}\p{N} _-]/gu, "").trim().slice(0, 60);
+export function fontStack(s = current) {
+  if (s.font === "custom") {
+    const name = cleanFontName(s.customFont);
+    return name ? `"${name}", system-ui, sans-serif` : null;
+  }
+  return FONTS.find((f) => f.value === s.font)?.stack ?? null;
+}
+
 export const isHex = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
 
 /** Applies appearance to <html>. Safe to call before the first render. */
@@ -147,8 +170,12 @@ export function applySettings(s = current) {
   const attr = (name, value) => (value ? root.setAttribute(name, value) : root.removeAttribute(name));
   attr("data-theme", s.theme === "light" || s.theme === "dark" ? s.theme : null);
   attr("data-text", s.textSize === "small" || s.textSize === "large" ? s.textSize : null);
-  attr("data-density", s.density === "compact" ? "compact" : null);
+  attr("data-density", s.density === "compact" || s.density === "ultra" ? s.density : null);
   attr("data-motion", s.reduceMotion ? "reduce" : null);
+  attr("data-colorblind", s.colorblind ? "on" : null);
+  const font = fontStack(s);
+  if (font) root.style.setProperty("--font", font);
+  else root.style.removeProperty("--font");
 
   const accent = isHex(s.accent) && s.accent.toLowerCase() !== DEFAULT_ACCENT ? s.accent : null;
   const tokens = accent ? accentTokens(accent) : null;

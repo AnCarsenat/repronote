@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { rawRequest } from "./core/raw-request.ts";
 import { attachmentURL } from "./core/attachments.ts";
 import { cacheFromURL, readCached, type CachedFile } from "./store/files.ts";
@@ -18,6 +18,9 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createMcpServer } from "./mcp/tools.ts";
 import * as notify from "./notify/notifications.ts";
 import { lookupEmails, type EmailLookup } from "./core/webmail.ts";
+import { zip, safeName, type ZipEntry } from "./core/zip.ts";
+import { checkForUpdates, lastUpdateInfo, scheduleUpdateChecks, updateSettings } from "./core/updates.ts";
+import { CHANNEL, PLATFORM, VERSION } from "./core/version.ts";
 
 const PORT = Number(process.env.PORT ?? 4173);
 // Localhost only by default: the data is personal. HOST=0.0.0.0 exposes it on your network.
@@ -45,6 +48,11 @@ const API_INDEX = {
     { method: "POST", path: "/api/contacts/emails", description: "Look up the teachers'/staff's email addresses with the ENT webmail's autocomplete (opens a window to log in to the webmail)." },
     { method: "GET", path: "/api/contacts", description: "Everyone you can message in Pronote (teachers, staff...). /api/contacts.csv for a spreadsheet." },
     { method: "GET", path: "/api/export", description: "All data as one JSON file." },
+    { method: "POST", path: "/api/update/check", description: "Check GitHub for a newer version now. Returns the result (also in /api/state under update)." },
+    { method: "PUT", path: "/api/update/settings", body: "{ enabled: boolean, channel: 'stable'|'dev' }", description: "Automatic update checks and release channel." },
+    { method: "GET", path: "/api/documents.zip", description: "Every document (report cards, casier, homework and news attachments) in one ZIP file." },
+    { method: "PUT", path: "/api/plugins/:id", body: "any JSON (max 1 MB)", description: "Data saved by a plugin (e.g. friends' timetables). Returned in /api/state under plugins." },
+    { method: "POST", path: "/api/download", body: "{ name, type, content, encoding?: 'base64' }", description: "Turns generated content into a download link (GET /api/download/:id, valid 10 minutes); used where blob downloads don't work (Android)." },
     { method: "POST", path: "/mcp", description: "MCP endpoint (Streamable HTTP) for AI assistants: homework, timetable, grades, news, notebook, documents tools." },
   ],
 };
@@ -126,29 +134,116 @@ async function setHomeworkDone(id: string, done: boolean): Promise<{ queued: boo
   }
 }
 
+/** A cached file, or one fetched from a fresh Pronote URL (then cached). */
+async function getFile(key: string, name: string, produce: () => Promise<string | null>): Promise<CachedFile | null> {
+  const cached = await readCached(key);
+  if (cached) return cached;
+  try {
+    const url = await produce();
+    return url ? await cacheFromURL(key, url) : null;
+  } catch (err) {
+    console.error(`[file] ${name}: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
+}
+
+const bulletinURL = async (session: pronote.SessionHandle, b: { ident: string; file: string; period?: string; year?: string }) => {
+  const data = await rawRequest(session, "GenerationPDF", {
+    avecDepot: true,
+    genreGenerationPDF: 12, // BulletinBIA
+    nomFichier: b.file,
+    ident: b.ident,
+    libellePeriodeNotation: b.period ?? "",
+    libelleAnnee: b.year ?? "",
+  }, 103);
+  const path = data?.url?.V ?? data?.url;
+  return path ? `${session.information.url}/${encodeURI(path)}` : null;
+};
+
 /** Serves a cached file, or fetches it from a fresh Pronote URL and caches it. */
 async function serveCached(res: ServerResponse, key: string, name: string, produce: () => Promise<string | null>) {
-  const send = ({ body, type }: CachedFile) => {
+  const file = await getFile(key, name, produce);
+  if (file) {
     res.writeHead(200, {
-      "Content-Type": type,
+      "Content-Type": file.type,
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
       "Cache-Control": "private, max-age=86400",
     });
-    res.end(body);
-  };
-  const cached = await readCached(key);
-  if (cached) return send(cached);
-  try {
-    const url = await produce();
-    const fresh = url ? await cacheFromURL(key, url) : null;
-    if (fresh) return send(fresh);
-  } catch (err) {
-    console.error(`[file] ${name}: ${err instanceof Error ? err.message : err}`);
+    return res.end(file.body);
   }
   res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
   res.end(`<meta charset="utf-8"><p style="font-family:system-ui">Fichier indisponible : Pronote est injoignable et ce fichier n'a pas encore été enregistré. Réessayez une fois connecté.</p>`);
 }
 
+/**
+ * Every document in one ZIP: report cards, casier files, homework and news
+ * attachments. Files already saved come from disk; the others are fetched with
+ * one Pronote session (skipped when offline, and listed in a text file).
+ */
+async function documentsZip(): Promise<Buffer> {
+  type Job = { folder: string; name: string; key: string; date?: string; url: (s: pronote.SessionHandle) => Promise<string | null> | string | null };
+  const jobs: Job[] = [];
+  const docs = store.get<any>("documents");
+  for (const b of docs?.bulletins ?? []) {
+    jobs.push({ folder: `Bulletins/${b.year ?? "Année inconnue"}`, name: b.file || `${b.label} ${b.period ?? ""}.pdf`, key: `bia:${b.ident}`, url: (s) => bulletinURL(s, b) });
+  }
+  for (const f of docs?.files ?? []) {
+    if (f.kind === 0) continue; // web links
+    jobs.push({ folder: `Casier/${f.category?.name ?? "Sans catégorie"}`, name: f.name, key: `casier:${f.id}`, date: f.date, url: (s) => attachmentURL(s, f.id, f.name) });
+  }
+  const attachment = (folder: string, f: any, date?: string) => {
+    if (!f || f.kind === 0 || !f.id) return;
+    jobs.push({ folder, name: f.name, key: `att:${f.id}:${f.name}`, date, url: (s) => attachmentURL(s, f.id, f.name) });
+  };
+  const homework = new Map<string, any>();
+  for (const a of [...Object.values(store.get<Record<string, any>>("homeworkArchive") ?? {}), ...(store.get<any[]>("homework") ?? [])]) homework.set(homeworkKey(a), a);
+  for (const a of homework.values()) for (const f of a.attachments ?? []) attachment(`Devoirs/${a.subject?.name ?? "Autre"}`, f, a.deadline);
+  for (const i of store.get<any>("news")?.items ?? []) for (const f of i.attachments ?? []) attachment(`Informations/${i.title || "Sans titre"}`.slice(0, 80), f, i.creationDate);
+
+  const entries: ZipEntry[] = [];
+  const missing: string[] = [];
+  const taken = new Map<string, Set<string>>();
+  const added = new Set<string>();
+  const add = (j: Job, body: Buffer) => {
+    added.add(j.key);
+    const folder = j.folder.split("/").map((p) => safeName(p, new Set())).join("/");
+    if (!taken.has(folder)) taken.set(folder, new Set());
+    const date = j.date ? new Date(j.date) : undefined;
+    entries.push({ name: `${folder}/${safeName(j.name, taken.get(folder)!)}`, data: body, date: date && !Number.isNaN(+date) ? date : undefined });
+  };
+  const todo: Job[] = [];
+  const seen = new Set<string>();
+  for (const j of jobs) {
+    if (seen.has(j.key)) continue;
+    seen.add(j.key);
+    const cached = await readCached(j.key);
+    if (cached) add(j, cached.body);
+    else todo.push(j);
+  }
+  if (todo.length) {
+    try {
+      await live.use(async (session) => {
+        for (const j of todo) {
+          const file = await getFile(j.key, j.name, async () => j.url(session));
+          if (file) add(j, file.body);
+        }
+      });
+    } catch (err) {
+      console.error(`[documents.zip] ${err instanceof Error ? err.message : err}`);
+    }
+    for (const j of todo) if (!added.has(j.key)) missing.push(`${j.folder}/${j.name}`);
+  }
+  if (!entries.length && !missing.length) {
+    entries.push({ name: "aucun-document.txt", data: Buffer.from("Aucun document synchronisé pour l'instant.\r\n", "utf8") });
+  }
+  if (missing.length) {
+    entries.push({ name: "fichiers-manquants.txt", data: Buffer.from(`Ces fichiers n'ont pas pu être récupérés (Pronote injoignable ou fichier supprimé) :\r\n\r\n${[...new Set(missing)].join("\r\n")}\r\n`, "utf8") });
+  }
+  return zip(entries);
+}
+
+/** Generated files handed to the browser as a normal download (see POST /api/download). */
+const downloads = new Map<string, { name: string; type: string; body: Buffer }>();
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -162,9 +257,17 @@ const json = (res: ServerResponse, body: unknown, status = 200) => {
   res.end(JSON.stringify(body));
 };
 
+const MAX_BODY = 8 * 1024 * 1024;
+
 async function readJson(req: IncomingMessage): Promise<any> {
-  let body = "";
-  for await (const chunk of req) body += chunk;
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY) throw new Error("Request body too large");
+    chunks.push(chunk);
+  }
+  const body = Buffer.concat(chunks).toString("utf8");
   return body ? JSON.parse(body) : {};
 }
 
@@ -179,6 +282,10 @@ const state = () => ({
   notifications: notify.getSettings(store),
   systemNotifications: notify.hasSystemNotifier(),
   events: notify.recentEvents(store).slice(0, 20),
+  plugins: store.getSetting("plugins") ?? {},
+  version: { current: VERSION, channel: CHANNEL, platform: PLATFORM },
+  update: lastUpdateInfo(store),
+  updateSettings: updateSettings(store),
   pronoteURL: pronoteURL,
   data: store.all(),
 });
@@ -313,18 +420,7 @@ const server = createServer(async (req, res) => {
     // Report card (bulletin) PDF, generated by Pronote on demand.
     if (url.pathname === "/api/doc/bulletin" && req.method === "GET") {
       return serveCached(res, `bia:${q("ident")}`, q("n") || "bulletin.pdf", () =>
-        live.use(async (session) => {
-          const data = await rawRequest(session, "GenerationPDF", {
-            avecDepot: true,
-            genreGenerationPDF: 12, // BulletinBIA
-            nomFichier: q("n"),
-            ident: q("ident"),
-            libellePeriodeNotation: q("period"),
-            libelleAnnee: q("year"),
-          }, 103);
-          const path = data?.url?.V ?? data?.url;
-          return path ? `${session.information.url}/${encodeURI(path)}` : null;
-        }));
+        live.use((session) => bulletinURL(session, { ident: q("ident"), file: q("n"), period: q("period"), year: q("year") })));
     }
     // Homework for any date range (infinite scroll), fetched live and archived.
     if (url.pathname === "/api/homework/range" && req.method === "GET") {
@@ -388,7 +484,7 @@ const server = createServer(async (req, res) => {
       }
     }
     // Everyone you can message in Pronote (teachers, staff...), as JSON or CSV.
-    if (url.pathname.startsWith("/api/contacts") && req.method === "GET") {
+    if ((url.pathname === "/api/contacts" || url.pathname === "/api/contacts.csv") && req.method === "GET") {
       try {
         const contacts = await live.use(async (session) => {
           const out: any[] = [];
@@ -440,7 +536,65 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === "/api/export" && req.method === "GET") {
       res.setHeader("Content-Disposition", `attachment; filename="pronote-export-${new Date().toISOString().slice(0, 10)}.json"`);
-      return json(res, { exportedAt: new Date().toISOString(), layout: store.getSetting("layout"), subjectSettings: store.getSetting("subjectSettings"), ...store.all() });
+      return json(res, {
+        exportedAt: new Date().toISOString(),
+        pronoteURL,
+        layout: store.getSetting("layout"),
+        subjectSettings: store.getSetting("subjectSettings"),
+        notifications: notify.getSettings(store),
+        recentEvents: notify.recentEvents(store),
+        plugins: store.getSetting("plugins") ?? {},
+        syncLog: { last: store.lastSync(), lastSuccessful: store.lastSuccessfulSync() },
+        ...store.all(),
+      });
+    }
+    if (url.pathname === "/api/update/check" && req.method === "POST") {
+      return json(res, await checkForUpdates(store, { force: true }));
+    }
+    if (url.pathname === "/api/update/settings" && req.method === "PUT") {
+      const value = await readJson(req);
+      if (typeof value?.enabled !== "boolean" || !["stable", "dev"].includes(value?.channel)) return json(res, { error: "Invalid settings" }, 400);
+      const changed = value.channel !== updateSettings(store).channel;
+      store.setSetting("updates", { enabled: value.enabled, channel: value.channel });
+      if (changed || value.enabled) await checkForUpdates(store, { force: true });
+      return json(res, state());
+    }
+    if (url.pathname === "/api/documents.zip" && req.method === "GET") {
+      const body = await documentsZip();
+      res.writeHead(200, {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="pronote-documents-${new Date().toISOString().slice(0, 10)}.zip"`,
+        "Content-Length": body.length,
+        "Cache-Control": "no-store",
+      });
+      return res.end(body);
+    }
+    const plugin = url.pathname.match(/^\/api\/plugins\/([a-z0-9-]{1,40})$/);
+    if (plugin && req.method === "PUT") {
+      const value = await readJson(req);
+      if (JSON.stringify(value).length > 1024 * 1024) return json(res, { error: "Données trop volumineuses (1 Mo max)" }, 413);
+      store.setSetting("plugins", { ...(store.getSetting<Record<string, unknown>>("plugins") ?? {}), [plugin[1]]: value });
+      return json(res, { ok: true });
+    }
+    if (url.pathname === "/api/download" && req.method === "POST") {
+      const { name, type, content, encoding } = await readJson(req);
+      if (typeof content !== "string" || typeof name !== "string") return json(res, { error: "Invalid download" }, 400);
+      const id = randomUUID();
+      const body = Buffer.from(content, encoding === "base64" ? "base64" : "utf8");
+      downloads.set(id, { name: name.slice(0, 150), type: typeof type === "string" ? type : "application/octet-stream", body });
+      setTimeout(() => downloads.delete(id), 10 * 60_000).unref();
+      return json(res, { url: `/api/download/${id}` });
+    }
+    const dl = url.pathname.match(/^\/api\/download\/([0-9a-f-]{36})$/);
+    if (dl && req.method === "GET") {
+      const file = downloads.get(dl[1]);
+      if (!file) return json(res, { error: "Lien expiré" }, 404);
+      res.writeHead(200, {
+        "Content-Type": file.type,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        "Cache-Control": "no-store",
+      });
+      return res.end(file.body);
     }
 
     if (req.method !== "GET") return json(res, { error: "Not found" }, 404);
@@ -478,11 +632,14 @@ export function startServer({ port = PORT, host = HOST } = {}): Promise<{ port: 
       console.log(`Pronote UI: http://localhost:${actual}`);
       if (pronoteURL) sync(); // nothing to sync before the first login
       const timer = setInterval(() => pronoteURL && sync(), SYNC_EVERY_MS);
+      const stopUpdates = scheduleUpdateChecks(store, (info) =>
+        notify.showSystemNotification({ id: `update:${info.latest}`, kind: "news", title: `repronote ${info.latest} est disponible`, body: "Ouvrez repronote pour le télécharger.", at: Date.now() }));
       resolve({
         port: actual,
         // Log out of Pronote so the next start isn't refused.
         async stop() {
           clearInterval(timer);
+          stopUpdates();
           await live.reset();
           server.close();
         },

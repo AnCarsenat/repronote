@@ -94,6 +94,13 @@ export function subjectName(name) {
  * Subject color from Pronote. Some subjects come white (invisible on a white
  * card): those fall back to a neutral gray.
  */
+/** A stable pattern number (0-7) for a name: lets colour-blind mode tell subjects/people apart. */
+export function patternIndex(name) {
+  let h = 0;
+  for (const ch of String(name ?? "")) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return h % 8;
+}
+
 export function subjectColor(c) {
   const hex = /^#?([0-9a-f]{6})$/i.exec(c?.backgroundColor ?? "")?.[1];
   if (!hex) return c?.backgroundColor || "var(--muted)";

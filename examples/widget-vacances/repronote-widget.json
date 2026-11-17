@@ -1,0 +1,7 @@
+{
+  "name": "Avant les vacances",
+  "description": "Compte à rebours jusqu'aux prochaines vacances, en jours et en heures de cours.",
+  "version": "1.0.0",
+  "entry": "widget.js",
+  "permissions": ["timetable"]
+}

@@ -1,6 +1,6 @@
 import { widgetTypes, widgetType, defaultLayout } from "../widgets/index.js";
 import { h, formatAgo, emptyState } from "../lib.js";
-import { store, saveLayout } from "../state.js";
+import { store, saveLayout, saveLayoutQuietly } from "../state.js";
 import { openModal } from "../components.js";
 
 // Home screen: widgets in up to 3 columns. Each widget keeps the column you
@@ -59,15 +59,16 @@ function openGallery(col) {
   const onHome = new Set(layout().widgets.map((w) => w.type));
   openModal(col === undefined ? "Ajouter un widget" : "Ajouter un widget dans cette colonne", (close) => [
     h("div", { class: "gallery-grid" },
-      widgetTypes.map((t) =>
+      widgetTypes().map((t) =>
         h("button", { type: "button", class: "gallery-item", onclick: () => (close(), addWidget(t.type, col)) },
-          h("strong", {}, t.title),
+          h("strong", {}, t.title, t.github ? h("span", { class: "tag" }, "GitHub") : null),
           h("span", { class: "muted small" }, t.description),
           onHome.has(t.type) ? h("span", { class: "tag" }, "Déjà sur l'accueil (vous pouvez l'ajouter encore)") : null,
         ),
       ),
     ),
     h("div", { class: "modal-foot" },
+      h("a", { class: "button small-btn", href: "#/plugins/_github-widgets", onclick: () => close() }, "＋ Installer un widget depuis GitHub"),
       h("button", { type: "button", class: "secondary small-btn", onclick: () => {
         if (confirm("Remettre l'accueil par défaut ?")) {
           openSettings.clear();
@@ -95,6 +96,10 @@ function settingsPanel(w, rerender) {
     if (f.type === "boolean") {
       return h("label", { class: "field check", for: id },
         h("input", { id, type: "checkbox", checked: Boolean(values[f.key]), onchange: (e) => set(f.key, e.target.checked) }), f.label);
+    }
+    if (f.type === "text") {
+      return h("label", { class: "field", for: id }, h("span", {}, f.label),
+        h("input", { id, type: "text", maxlength: f.max ?? 60, placeholder: f.placeholder ?? "", value: String(values[f.key] ?? ""), onchange: (e) => set(f.key, e.target.value.trim()) }));
     }
     if (f.type === "select") {
       return h("label", { class: "field", for: id }, h("span", {}, f.label),
@@ -150,6 +155,55 @@ function settingsPanel(w, rerender) {
 
 // ---- Drag and drop between and within columns ----
 
+/** Touch dragging: the card follows the finger; dropped where the finger is lifted. */
+function touchDrag(e, el, w) {
+  e.preventDefault();
+  const grip = e.currentTarget;
+  grip.setPointerCapture(e.pointerId);
+  dragId = w.id;
+  const start = { x: e.clientX, y: e.clientY };
+  el.classList.add("dragging", "touch-dragging");
+  let target = null; // { col, id, before }
+  let scroll = 0;
+  const timer = setInterval(() => scroll && window.scrollBy(0, scroll), 16);
+
+  const move = (ev) => {
+    el.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
+    scroll = ev.clientY < 70 ? -12 : ev.clientY > innerHeight - 70 ? 12 : 0;
+    el.style.pointerEvents = "none";
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    el.style.pointerEvents = "";
+    clearDropMarks();
+    const card = under?.closest?.(".widget");
+    const col = under?.closest?.(".home-col");
+    if (card && card !== el) {
+      const r = card.getBoundingClientRect();
+      const before = ev.clientY < r.top + r.height / 2;
+      card.classList.add(before ? "drop-before" : "drop-after");
+      target = { col: Number(card.dataset.col), id: card.dataset.id, before };
+    } else if (col) {
+      col.classList.add("drop-end");
+      target = { col: Number(col.dataset.col), id: null, before: false };
+    } else target = null;
+  };
+  const end = (cancel) => {
+    clearInterval(timer);
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", up);
+    grip.removeEventListener("pointercancel", cancelled);
+    el.classList.remove("dragging", "touch-dragging");
+    el.style.transform = "";
+    clearDropMarks();
+    if (!cancel && target) dropAt(target.col, target.id, target.before);
+    else dragId = null;
+  };
+  const up = () => end(false);
+  const cancelled = () => end(true);
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", up);
+  grip.addEventListener("pointercancel", cancelled);
+}
+
 function clearDropMarks() {
   document.querySelectorAll(".drop-before, .drop-after, .drop-end").forEach((el) => el.classList.remove("drop-before", "drop-after", "drop-end"));
 }
@@ -180,7 +234,15 @@ function widgetCard(w, rerender) {
   if (type.needs.some((k) => !(k in data))) body = emptyState(store.state ? "Pas encore de données." : "Chargement…");
   else {
     try {
-      body = type.render(data, settings);
+      // save(): settings written without re-rendering (e.g. text typed in a note).
+      const save = (patch) => {
+        const next = layout();
+        const target = next.widgets.find((x) => x.id === w.id);
+        if (!target) return;
+        target.settings = { ...(target.settings ?? {}), ...patch };
+        saveLayoutQuietly(next);
+      };
+      body = type.render(data, settings, { id: w.id, save });
     } catch (err) {
       console.error(err);
       body = emptyState(`Erreur du widget : ${err.message}`);
@@ -192,7 +254,7 @@ function widgetCard(w, rerender) {
   const el = h("section", { class: `card widget ${w.size === "wide" ? "full" : ""} ${open ? "settings-open" : ""} ${highlightId === w.id ? "flash" : ""}`, id: `w-${w.id}` },
     h("div", { class: "widget-head" },
       h("button", { type: "button", class: "icon-btn grip", title: "Glisser pour déplacer", "aria-label": `Déplacer ${type.title}` }, svgIcon(GRIP, 3.2)),
-      h("h2", {}, type.title),
+      h("h2", {}, settings.title || type.title),
       h("button", {
         type: "button", class: `icon-btn gear ${open ? "active" : ""}`, title: "Réglages du widget",
         "aria-label": `Réglages de ${type.title}`, "aria-expanded": String(open),
@@ -207,8 +269,18 @@ function widgetCard(w, rerender) {
     Number.isFinite(oldest) && Date.now() - oldest > 60 * 60_000 ? h("p", { class: "stale" }, `Données ${formatAgo(oldest)}`) : null,
   );
 
-  // Drag by the grip only, so text inside widgets stays selectable.
-  el.querySelector(".grip").addEventListener("pointerdown", () => (el.draggable = true));
+  el.dataset.col = String(w.col);
+  el.dataset.id = w.id;
+  // Drag by the grip only, so text inside widgets stays selectable. Mouse:
+  // HTML drag and drop. Touch (phones, Android app): pointer events below.
+  const grip = el.querySelector(".grip");
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") {
+      el.draggable = true;
+      return;
+    }
+    touchDrag(e, el, w);
+  });
   el.addEventListener("dragstart", (e) => {
     dragId = w.id;
     e.dataTransfer.effectAllowed = "move";
@@ -251,7 +323,7 @@ export default {
     const columns = Array.from({ length: n }, (_, c) => {
       // Columns beyond what fits are appended to the last visible one.
       const mine = widgets.filter((w) => w.size !== "wide" && Math.min(w.col, n - 1) === c);
-      const col = h("div", { class: "home-col" },
+      const col = h("div", { class: "home-col", "data-col": String(c) },
         mine.map((w) => widgetCard(w, rerender)),
         h("button", { type: "button", class: "add-here", onclick: () => openGallery(c) }, "+ Ajouter ici"),
       );

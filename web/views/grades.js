@@ -30,7 +30,9 @@ export default {
     const grades = data.grades;
     if (!grades?.periods?.length) return emptyState("Pas encore de notes synchronisées.");
 
-    periodId ??= grades.defaultPeriodId ?? grades.periods[0].id;
+    // A period from another school year (after a new sync) no longer exists.
+    if (!grades.periods.some((p) => p.id === periodId)) periodId = grades.defaultPeriodId ?? grades.periods[0].id;
+    grades.byPeriod ??= {};
     const overview = grades.byPeriod[periodId] ?? { grades: [], subjectsAverages: [] };
     const settings = subjectSettings();
 

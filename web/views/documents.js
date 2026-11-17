@@ -28,7 +28,12 @@ export default {
       .filter((f) => !category || f.category?.name === category)
       .sort((a, b) => new Date(b.date ?? 0) - new Date(a.date ?? 0));
 
+    const downloadable = docs.bulletins.length + docs.files.filter((f) => f.kind !== 0).length;
     return [
+      h("div", { class: "view-toolbar" },
+        h("a", { class: "button small-btn", href: "/api/documents.zip", download: "", "aria-disabled": downloadable ? false : "true", onclick: (e) => downloadable || e.preventDefault() },
+          "Tout télécharger (ZIP)"),
+        h("span", { class: "muted small" }, "Bulletins, casier et pièces jointes des devoirs et informations. Peut prendre un moment la première fois.")),
       h("section", { class: "card wide" },
         h("h2", {}, `Bulletins (${docs.bulletins.length})`),
         docs.bulletins.length

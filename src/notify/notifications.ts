@@ -149,6 +149,13 @@ export function setSystemNotifier(fn: SystemNotifier): void {
 }
 export const hasSystemNotifier = () => systemNotifier !== null;
 
+/** One notification on the device only (not webhooks), e.g. "update available". */
+export function showSystemNotification(event: NotifyEvent): void {
+  try {
+    systemNotifier?.(event);
+  } catch {}
+}
+
 const RECENT = "recentEvents";
 const MAX_RECENT = 50;
 

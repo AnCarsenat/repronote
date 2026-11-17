@@ -1,8 +1,10 @@
 import { openClassDetails } from "../components.js";
-import { h, classList, classTitle, startOfWeek, addDays, sameDay, formatShortDay, formatTime, inDuration, emptyState, subjectColor, DAY } from "../lib.js";
+import { downloadFile, store } from "../state.js";
+import { weekPdf, rgb } from "../pdf.js";
+import { h, patternIndex, classList, classTitle, startOfWeek, addDays, sameDay, formatShortDay, formatTime, inDuration, emptyState, subjectColor, DAY } from "../lib.js";
 
-// Fixed scale: gaps show at their real size.
-const PX_PER_MIN = 1.05;
+// Fixed scale: gaps show at their real size (tighter in ultra-compact).
+let PX_PER_MIN = 1.05;
 const MIN_GAP_LABEL = 50; // minutes
 
 let weekStart = null; // Monday of the week shown
@@ -67,6 +69,7 @@ function classBlock({ c, lane, lanes }, dayStartMin, now) {
       "--subject": subjectColor(c),
     },
     title: [classTitle(c), `${formatTime(c.startDate)} – ${formatTime(c.endDate)}`, where, ...(c.teacherNames ?? []), c.status].filter(Boolean).join("\n"),
+    "data-pat": String(patternIndex(classTitle(c))),
     tabindex: "0",
     role: "button",
     onclick: () => openClassDetails(c),
@@ -105,6 +108,7 @@ export default {
   title: "Emploi du temps",
 
   render(data, rerender) {
+    PX_PER_MIN = document.documentElement.dataset.density === "ultra" ? 0.78 : 1.05;
     const now = new Date();
     const classes = classList(data);
     weekStart ??= startOfWeek(now.getDay() === 6 || now.getDay() === 0 ? addDays(now, 2) : now);
@@ -195,7 +199,40 @@ export default {
       },
     };
 
-    nav.append(spanControl);
+    const exportPdf = async () => {
+      const user = store.state?.data?.user?.data;
+      const blocks = days.flatMap((day, di) =>
+        withLanes(ofWeek.filter((c) => sameDay(c.startDate, day))).map(({ c, lane, lanes }) => ({
+          day: di,
+          from: minutesOfDay(c.startDate),
+          to: minutesOfDay(c.endDate),
+          lane,
+          lanes,
+          color: rgb(subjectColor(c)),
+          title: classTitle(c),
+          lines: [
+            [(c.classrooms ?? []).join(", "), `${formatTime(c.startDate)}–${formatTime(c.endDate)}`].filter(Boolean).join(" · "),
+            (c.teacherNames ?? []).join(", "),
+            [c.status, c.test ? "Évaluation" : ""].filter(Boolean).join(" · "),
+          ].filter(Boolean),
+          faded: c.canceled,
+          strike: c.canceled,
+        })));
+      const content = weekPdf({
+        title: `Emploi du temps — semaine du ${formatShortDay(weekStart)}`,
+        subtitle: [user?.name, user?.className, user?.establishment, holiday ? `Vacances / férié : ${holiday.name}` : ""].filter(Boolean).join(" · "),
+        days, startMin, endMin, blocks,
+      });
+      try {
+        await downloadFile(`emploi-du-temps-${weekStart.toISOString().slice(0, 10)}.pdf`, "application/pdf", content, { base64: true });
+      } catch {
+        alert("Export impossible : serveur local injoignable.");
+      }
+    };
+    nav.append(
+      h("button", { type: "button", class: "secondary small-btn tt-pdf", title: "Cette semaine en PDF (A4 paysage)", onclick: exportPdf }, "PDF"),
+      spanControl,
+    );
     return [
       nav,
       holiday ? h("p", { class: "banner info" }, `Vacances / férié : ${holiday.name}`) : null,

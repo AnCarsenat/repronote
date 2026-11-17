@@ -8,7 +8,8 @@
 //   defaults     default settings
 //   settings     fields for the gear panel: { key, label, type: "number" | "boolean" | "select",
 //                min?, max?, options?: [{ value, label }] }
-//   render(data, settings)  returns DOM node(s), built with h() from ../lib.js.
+//   render(data, settings, ctx)  returns DOM node(s), built with h() from ../lib.js.
+//                ctx: { id, save(patch) } — save() stores settings without re-rendering.
 //                It only reads the local copy, so it works offline.
 //
 // Shared pieces live in ../components.js and ../charts.js.
@@ -18,9 +19,13 @@ import todo from "./todo.js";
 import tests from "./tests.js";
 import workload from "./workload.js";
 import recentGrades from "./recent-grades.js";
+import note from "./note.js";
+import { installedWidgetTypes } from "../plugins/github.js";
 
-export const widgetTypes = [now, day, todo, tests, workload, recentGrades];
-export const widgetType = (type) => widgetTypes.find((w) => w.type === type);
+export const builtinWidgetTypes = [now, day, todo, tests, workload, recentGrades, note];
+/** Built-in widgets, then the ones installed from GitHub ("gh:<id>"). */
+export const widgetTypes = () => [...builtinWidgetTypes, ...installedWidgetTypes()];
+export const widgetType = (type) => widgetTypes().find((w) => w.type === type);
 
 // `col`: column on wide screens (0 = left). Narrower screens merge columns.
 export const defaultLayout = () => ({
