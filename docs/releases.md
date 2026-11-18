@@ -44,6 +44,7 @@ Job `release-dev` in `.github/workflows/build.yml`: after a successful build of 
 |---|---|---|
 | Android | the APK for the phone's ABI | opened by the system installer, over the old app — **requires the same signing key** (below) |
 | Windows | `win-x64.exe` | NSIS installer over the old version |
+| macOS | `mac-arm64.dmg` / `mac-x64.dmg` (by `process.arch`) | drag into Applications over the old app; no Apple certificate, ad-hoc signed by `scripts/mac-adhoc-sign.cjs`, so Gatekeeper asks once (README « macOS ») |
 | Linux AppImage / deb / tar.gz | the same kind of file | replace / install the package |
 | Server from `install-linux.sh` | the command; `repronote-server --update` | re-runs the installer (keeps the channel) |
 | Server zip / source | the zip | replace the folder / `git pull` |
@@ -60,3 +61,5 @@ Updates only install over an app signed with the same key. CI signs with the key
 | `ANDROID_KEY_PASSWORD` | key password |
 
 **Never lose or replace this key**: apps signed with another key can't update, users would have to uninstall (losing their data). Keep an offline backup of the keystore and its passwords.
+
+The secrets were added on 2026-11-17: v0.1.0–v0.3.0 (and dev builds before run 38) were signed with each CI runner's throwaway debug key, so every one of them needs a one-time uninstall before 0.4.0 installs (the README's update table says so). To stop that happening again, the `android` job sets `REPRONOTE_REQUIRE_SIGNING` on `dev` and tag builds, and `android/app/build.gradle` fails instead of falling back to the debug key; pull requests (no secrets) still build debug-signed artifacts.

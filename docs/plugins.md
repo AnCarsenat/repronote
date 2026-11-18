@@ -50,16 +50,28 @@ Les données suivent les types de [pawnote](https://github.com/BlocksHub/Pawnote
 
 ## 2. Le code
 
-Le fichier `entry` s'exécute dans une page vide qui contient `<div id="app"></div>`, avec un objet global `repronote` :
+Le fichier `entry` s'exécute dans un **Worker** (pas de page, pas de `document`), avec un objet global `repronote`. On affiche en donnant du HTML à `repronote.render(...)`, et on réagit aux clics avec `data-action` :
 
 ```js
-const app = document.getElementById("app");
+let compteur = 0;
 
-repronote.onUpdate((data) => {
-  // Appelé au démarrage puis à chaque synchronisation, avec les données autorisées.
+function afficher(data) {
   const cours = (data.timetable ?? []).filter((c) => !c.canceled);
-  app.textContent = `${cours.length} cours synchronisés`;
+  // html`…` échappe chaque ${valeur} : les données ne peuvent pas injecter de HTML.
+  repronote.render(repronote.html`
+    <div class="card">
+      <p>${cours.length} cours synchronisés</p>
+      <button data-action="plus">Cliqué ${compteur} fois</button>
+    </div>`);
+}
+
+repronote.on("plus", () => {
+  compteur++;
+  afficher(repronote.data);
 });
+
+// Appelé au démarrage puis à chaque synchronisation, avec les données autorisées.
+repronote.onUpdate(afficher);
 ```
 
 | API | |
@@ -67,20 +79,28 @@ repronote.onUpdate((data) => {
 | `repronote.onUpdate(fn)` | `fn(data)` au démarrage et quand les données changent |
 | `repronote.data` | les dernières données reçues |
 | `repronote.permissions` | les permissions accordées |
+| `repronote.render(html)` | remplace ce qui est affiché. `html` : une chaîne ou le résultat de `repronote.html` |
+| `` repronote.html`…${valeur}…` `` | gabarit qui échappe les valeurs (les tableaux sont joints, un `repronote.html` imbriqué est gardé tel quel) |
+| `repronote.escape(texte)` | échappe un texte pour du HTML |
+| `repronote.on(nom, fn)` | `fn(event)` quand un élément `data-action="nom"` est cliqué (boutons, liens, cartes…) ou modifié (`input`, `select`, `textarea` : événements `input` et `change`) |
 | `repronote.storage.get()` / `repronote.storage.set(valeur)` | une valeur JSON à vous (900 ko max), gardée sur le serveur repronote de l'utilisateur |
 | `repronote.download(nom, type, contenu)` | propose un fichier texte à télécharger (CSV, ICS…) — permission `download` |
 
-Le style de l'application est déjà là : variables CSS (`--bg`, `--card`, `--text`, `--muted`, `--border`, `--accent`, `--accent-text`, `--good`, `--bad`, `--radius`), classes `card`, `muted`, boutons et tableaux mis en forme, thème clair ou sombre. La hauteur du cadre suit votre contenu.
+`event` contient `type` (`click`, `input`, `change`), `action`, `dataset` (les attributs `data-*` de l'élément), `value`, `checked`, et `values` : la valeur de chaque champ de la zone qui a un attribut `name`. Donnez un `id` aux champs : le texte en cours de frappe et le curseur sont gardés quand vous ré-affichez.
+
+Le style de l'application est déjà là : variables CSS (`--bg`, `--card`, `--text`, `--muted`, `--border`, `--accent`, `--accent-text`, `--good`, `--bad`, `--radius`), classes `card`, `muted`, boutons et tableaux mis en forme, thème clair ou sombre. Les attributs `style` et les balises `<style>` sont permis. La hauteur du cadre suit votre contenu.
+
+**Ce que le HTML peut contenir :** les balises de texte, listes, tableaux, `img` (en `data:` seulement), `details`, champs de formulaire et boutons, SVG simple. Le reste est retiré à l'affichage : scripts, attributs `on…`, `iframe`, `form`, `meta`, et les adresses des liens (`href`) — un lien ne peut pas ouvrir de page.
 
 ## 3. Le bac à sable : ce qui est interdit
 
-Le code d'un plugin vient de quelqu'un d'autre ; repronote le fait tourner dans un `<iframe sandbox="allow-scripts">` avec une politique de sécurité sans réseau :
+Le code d'un plugin vient de quelqu'un d'autre ; repronote le fait tourner dans un Worker, à l'intérieur d'un `<iframe sandbox="allow-scripts">` dont la politique de sécurité n'autorise aucun accès réseau :
 
-- **pas d'Internet** : `fetch`, images externes, formulaires, navigation et fenêtres sont bloqués. Tout doit être dans votre fichier (les images en `data:`) ;
+- **pas d'Internet** : `fetch`, `WebSocket`, `importScripts`, images externes, formulaires, liens et navigation sont bloqués. Tout doit être dans votre fichier (les images en `data:`) ;
 - **pas d'accès à repronote** : ni à sa page, ni à ses cookies, ni à son API locale, ni au `localStorage` ;
 - **seulement les données autorisées**, et rien ne peut sortir de l'appareil.
 
-Bonnes pratiques : n'insérez jamais des données avec `innerHTML` (utilisez `textContent`), gérez les données absentes (`data.timetable ?? []`), restez léger.
+Bonnes pratiques : construisez le HTML avec `repronote.html` (jamais en collant des données dans une chaîne), gérez les données absentes (`data.timetable ?? []`), restez léger.
 
 ## 4. Publier
 

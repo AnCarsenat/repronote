@@ -25,25 +25,44 @@ function open(mode: "control" | "cdp"): Promise<Socket> {
 // ---- control channel -------------------------------------------------------
 
 export class Control extends EventEmitter {
-  private socket: Socket | null = null;
-  private buffer = "";
+  private socket: Promise<Socket> | null = null;
 
-  async send(message: Record<string, unknown>): Promise<void> {
-    if (!this.socket || this.socket.destroyed) {
-      this.socket = await open("control");
-      this.socket.setEncoding("utf8");
-      this.socket.on("data", (chunk: string) => {
-        this.buffer += chunk;
+  /** One connection, shared: two sends at once must not open two (and lose events). */
+  private connection(): Promise<Socket> {
+    this.socket ??= open("control").then((socket) => {
+      let buffer = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk: string) => {
+        buffer += chunk;
         let nl;
-        while ((nl = this.buffer.indexOf("\n")) >= 0) {
-          const line = this.buffer.slice(0, nl);
-          this.buffer = this.buffer.slice(nl + 1);
-          if (line.trim()) this.emit("event", JSON.parse(line));
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nl);
+          buffer = buffer.slice(nl + 1);
+          if (!line.trim()) continue;
+          // A bad line must not throw inside this listener: that would crash Node.
+          let event: unknown;
+          try {
+            event = JSON.parse(line);
+          } catch {
+            console.warn("[bridge] unreadable control message ignored");
+            continue;
+          }
+          this.emit("event", event);
         }
       });
-      this.socket.on("close", () => (this.socket = null));
-    }
-    this.socket.write(JSON.stringify(message) + "\n");
+      socket.on("error", () => {});
+      socket.on("close", () => (this.socket = null));
+      return socket;
+    }, (err) => {
+      this.socket = null;
+      throw err;
+    });
+    return this.socket;
+  }
+
+  async send(message: Record<string, unknown>): Promise<void> {
+    const socket = await this.connection();
+    socket.write(JSON.stringify(message) + "\n");
   }
 }
 
@@ -117,15 +136,22 @@ export class CdpSession extends EventEmitter {
         const end = head.indexOf("\r\n\r\n");
         if (end < 0) return;
         this.socket.off("data", onData);
+        this.socket.off("close", onEarlyClose);
         const status = head.subarray(0, head.indexOf("\r\n")).toString();
-        if (!/ 101 /.test(status)) return reject(new Error(`DevTools WebSocket refused: ${status}`));
+        if (!/ 101 /.test(status)) {
+          this.socket.destroy();
+          return reject(new Error(`DevTools WebSocket refused: ${status}`));
+        }
         this.socket.on("data", (c: Buffer) => this.onData(c));
         this.socket.on("close", () => this.onClose());
         const rest = head.subarray(end + 4);
         if (rest.length) this.onData(rest);
         resolve();
       };
+      // Closed before the answer (WebView gone): fail instead of waiting forever.
+      const onEarlyClose = () => reject(new Error("DevTools connection closed during the handshake"));
       this.socket.on("data", onData);
+      this.socket.once("close", onEarlyClose);
       this.socket.once("error", reject);
       this.socket.write(
         `GET ${path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +

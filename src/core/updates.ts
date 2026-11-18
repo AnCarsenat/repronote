@@ -55,6 +55,8 @@ function assetFor(assets: Array<{ name: string; browser_download_url: string }>)
   switch (PLATFORM) {
     case "android": return find(new RegExp(`android-${ANDROID_ABI[process.env.REPRONOTE_ABI ?? process.arch] ?? "arm64-v8a"}\\.apk$`));
     case "desktop-windows": return find(/win-x64\.exe$/);
+    // An Intel build under Rosetta reports x64, so it is offered the Intel file again.
+    case "desktop-mac": return find(new RegExp(`mac-${process.arch === "arm64" ? "arm64" : "x64"}\\.dmg$`));
     case "desktop-appimage": return find(/\.AppImage$/);
     case "desktop-deb": return find(/\.deb$/);
     case "desktop-linux": return find(/linux-x64\.tar\.gz$/);

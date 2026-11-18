@@ -11,7 +11,8 @@ process.env.REPRONOTE_PLATFORM ??=
   process.platform === "win32" ? "desktop-windows"
   : process.env.APPIMAGE ? "desktop-appimage"
   : process.platform === "linux" && app.getPath("exe").startsWith("/opt/") ? "desktop-deb"
-  : process.platform === "linux" ? "desktop-linux" : `desktop-${process.platform}`;
+  : process.platform === "linux" ? "desktop-linux"
+  : process.platform === "darwin" ? "desktop-mac" : `desktop-${process.platform}`;
 
 // Windows shows notifications only for apps with this id (the installer's appId).
 if (process.platform === "win32") app.setAppUserModelId("io.github.ancarsenat.repronote");

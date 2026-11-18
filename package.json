@@ -27,6 +27,7 @@
     "desktop": "node scripts/build.mjs && electron .",
     "dist:linux": "node scripts/build.mjs && electron-builder --linux --publish never",
     "dist:win": "node scripts/build.mjs && electron-builder --win --publish never",
+    "dist:mac": "node scripts/build.mjs && electron-builder --mac --publish never",
     "dist:server": "node scripts/build.mjs && node scripts/package-server.mjs",
     "dist:android": "node scripts/build.mjs && cd android && ./gradlew assembleRelease",
     "mcp": "node src/mcp/stdio.ts"
@@ -80,9 +81,26 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false
     },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.education",
+      "identity": null
+    },
+    "dmg": {
+      "title": "repronote"
+    },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "toolsets": {
       "appimage": "1.0.3"
-    }
+    },
+    "afterPack": "scripts/mac-adhoc-sign.cjs"
   }
 }

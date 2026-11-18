@@ -58,7 +58,18 @@ export function installedWidgetTypes() {
   }));
 }
 
-const slug = (kind, repo) => `${KINDS[kind].prefix}${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 36)}`;
+/** FNV-1a: a short, stable hash so different repositories never share an id. */
+const hash = (text) => {
+  let h = 0x811c9dc5;
+  for (const c of text) h = Math.imul(h ^ c.codePointAt(0), 0x01000193) >>> 0;
+  return h.toString(36).padStart(7, "0").slice(-7);
+};
+// "a/b-c" and "a-b/c" (or two long names cut short) would give the same readable
+// part, and share the stored code and storage: the hash keeps them apart.
+const slug = (kind, repo) => {
+  const base = repo.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 28).replace(/-$/, "");
+  return `${KINDS[kind].prefix}${base}-${hash(repo.toLowerCase())}`;
+};
 
 async function getJSON(url) {
   const r = await fetch(url, { headers: { Accept: "application/vnd.github+json" }, referrerPolicy: "no-referrer", credentials: "omit" });
@@ -104,7 +115,9 @@ export async function fetchFromGitHub(kind, repo) {
 
 export function install(p, kind = p.kind ?? "plugin") {
   const k = KINDS[kind];
-  const id = slug(kind, p.repo);
+  // An update keeps the id it was installed with (ids made before the hash existed too).
+  const same = installedList(kind).find((x) => x.repo.toLowerCase() === p.repo.toLowerCase());
+  const id = same?.id ?? slug(kind, p.repo);
   const meta = { id, repo: p.repo, url: p.url, sha: p.sha, installedAt: Date.now(), ...p.manifest };
   const previous = pluginData(id);
   savePluginData(id, { code: p.code, storage: previous?.storage ?? null });

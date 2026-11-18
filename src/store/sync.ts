@@ -14,11 +14,31 @@ const startOfWeek = (d: Date) => {
   return day;
 };
 
-/** Sends actions made offline (ticked homework...) before fetching. */
+/**
+ * Sends actions made offline (ticked homework...) before fetching.
+ * Pronote ids change every session, so a queued tick is matched again by its
+ * content key on its day. One that can't be found (homework removed) or that
+ * Pronote refuses is dropped, so it can't make every later sync fail.
+ */
 export async function flushPending(session: pronote.SessionHandle, store: Store): Promise<void> {
+  const days = new Map<string, any[]>();
   for (const action of store.pending()) {
     if (action.type === "homeworkDone") {
-      await pronote.assignmentStatus(session, action.payload.id, action.payload.done);
+      const { id, key, deadline, done } = action.payload;
+      try {
+        let current: string | undefined = id;
+        if (key && deadline) {
+          const day = startOfDay(new Date(deadline));
+          const iso = day.toISOString();
+          if (!days.has(iso)) days.set(iso, await pronote.assignmentsFromIntervals(session, day, new Date(day.getTime() + DAY - 1)));
+          current = days.get(iso)!.find((a) => homeworkKey(a) === key)?.id;
+        }
+        if (current) await pronote.assignmentStatus(session, current, done);
+        else console.warn("[pending] homework not found any more, tick dropped");
+      } catch (err) {
+        if (isSessionExpiredError(err)) throw err; // keep it for the next session
+        console.warn(`[pending] tick dropped: ${err instanceof Error ? err.message : err}`);
+      }
     }
     store.removePending(action.id);
   }
@@ -231,7 +251,8 @@ export function applyPendingToSnapshot(store: Store): void {
   if (!pending.length) return;
   store.patch<any[]>("homework", (list) =>
     list.map((a) => {
-      const p = pending.findLast((x) => x.payload.id === a.id);
+      const key = homeworkKey(a);
+      const p = pending.findLast((x) => (x.payload.key ? x.payload.key === key : x.payload.id === a.id));
       return p ? { ...a, done: p.payload.done, pending: true } : a;
     }),
   );

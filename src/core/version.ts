@@ -22,7 +22,7 @@ export const CHANNEL: "stable" | "dev" =
 
 /**
  * What this copy of repronote is, to offer the right download:
- * android | desktop-windows | desktop-appimage | desktop-deb | desktop-linux | server-installed | server
+ * android | desktop-windows | desktop-mac | desktop-appimage | desktop-deb | desktop-linux | server-installed | server
  * (set by the Android/desktop entry points and the Linux installer's launcher).
  */
 export const PLATFORM: string = process.env.REPRONOTE_PLATFORM || "server";
