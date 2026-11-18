@@ -60,7 +60,10 @@ async function openPage({ interactive }: { interactive: boolean }): Promise<Driv
     const title = `repronote-login-${id}`;
     let targetId: string | undefined;
     for (let i = 0; i < 50 && !targetId; i++) {
-      const targets = await listTargets();
+      const targets = await listTargets().catch(async (err) => {
+        await control.send({ cmd: "close", id }).catch(() => {});
+        throw err;
+      });
       if (i === 0) console.log(`[android-driver] targets: ${targets.map((t) => `${t.type} "${t.title}"`).join(", ")}`);
       targetId = targets.find((t) => t.title === title)?.id;
       if (!targetId) await sleep(100);
@@ -71,9 +74,16 @@ async function openPage({ interactive }: { interactive: boolean }): Promise<Driv
       throw new Error("Login WebView not found in DevTools targets");
     }
 
-    const cdp = await CdpSession.attach(targetId);
-    await cdp.send("Network.enable");
-    await cdp.send("Page.enable");
+    // If DevTools fails now, close the WebView we opened (a visible one would stay on screen).
+    let cdp: CdpSession;
+    try {
+      cdp = await CdpSession.attach(targetId);
+      await cdp.send("Network.enable");
+      await cdp.send("Page.enable");
+    } catch (err) {
+      await control.send({ cmd: "close", id }).catch(() => {});
+      throw err;
+    }
 
     const requestCbs: Array<(url: string) => void> = [];
     const failedCbs: Array<(url: string, error: string) => void> = [];

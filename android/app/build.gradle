@@ -69,6 +69,12 @@ android {
 
     // Release builds are signed with the key given in the environment (CI
     // secrets); without one they fall back to the debug key so they still install.
+    // A CI runner makes a new debug key every run, so a debug-signed APK can't
+    // update any other build (v0.1.0–v0.3.0 shipped like that: phones stayed on
+    // the old app). CI sets REPRONOTE_REQUIRE_SIGNING for builds it publishes.
+    if (System.getenv("REPRONOTE_REQUIRE_SIGNING") && !System.getenv("ANDROID_KEYSTORE")) {
+        throw new GradleException("REPRONOTE_REQUIRE_SIGNING is set but ANDROID_KEYSTORE is not: refusing to publish a debug-signed APK (see docs/releases.md, Android signing).")
+    }
     signingConfigs {
         release {
             def ks = System.getenv("ANDROID_KEYSTORE")

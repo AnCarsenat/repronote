@@ -33,7 +33,7 @@ repronote is an alternative Pronote frontend: a local Node server that logs in t
 | `node scripts/demo-data.mjs /tmp/demo && REPRONOTE_DATA_DIR=/tmp/demo PORT=4180 npm run serve` | the app with fake data, no login, at http://localhost:4180 |
 | `npm run serve` | the real server (needs a Pronote login: `npm run login -- <url>` or the UI's welcome screen) |
 | `npm run build` | bundles in `dist/` (esbuild) |
-| `npm run dist:linux` / `dist:win` / `dist:server` / `dist:android` | packages (Android needs the SDK + NDK; CI builds it) |
+| `npm run dist:linux` / `dist:win` / `dist:mac` / `dist:server` / `dist:android` | packages (`dist:mac` needs a Mac; Android needs the SDK + NDK; CI builds both) |
 | `node scripts/screenshots.mjs http://localhost:4180 docs/screenshots` | README/site screenshots (demo data only) |
 
 There is no unit test suite. Testing means:
@@ -68,8 +68,9 @@ Write throwaway test scripts in a scratch folder, not in the repo.
 - Static files are served only from `web/` (path normalisation check). Uploaded/generated content goes through `/api/download/:id` with `Content-Disposition: attachment`.
 - `cacheFromURL` only fetches URLs of the configured Pronote instance.
 - Webhook URLs must be https (or http to localhost).
-- **Community plugins/widgets are untrusted code.** They run only in `web/plugins/sandbox.js`. Never:
+- **Community plugins/widgets are untrusted code.** They run only in `web/plugins/sandbox.js`: their code in a Worker (no `location`, so it can't navigate the frame to leak data), the frame runs only our nonce'd bootstrap, which sanitizes the HTML they render. Never:
   - add `allow-same-origin` (or other sandbox flags);
+  - run plugin code in the frame itself, or let rendered HTML keep scripts, `on…` attributes, `href`, forms, frames or external URLs;
   - loosen the iframe CSP (no network);
   - pass data kinds beyond the approved manifest permissions;
   - give them access to the API.

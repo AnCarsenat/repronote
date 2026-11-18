@@ -27,7 +27,22 @@ export class LiveSession {
         return fn(session);
       }
     };
-    const result = this.lock.then(run, run);
+    // A request Pronote never answers must not block every later call (sync,
+    // ticks, files) forever: past the limit (counted from when this call starts)
+    // the caller gets an error and the queue moves on; the stuck call is
+    // abandoned and its session dropped.
+    const limit = interactive ? 20 * 60_000 : 10 * 60_000;
+    const limited = () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          void this.reset().catch(() => {});
+          reject(new Error("Pronote ne répond pas (délai dépassé)."));
+        }, limit);
+      });
+      return Promise.race([run(), timeout]).finally(() => clearTimeout(timer));
+    };
+    const result = this.lock.then(limited, limited);
     this.lock = result.catch(() => {});
     return result;
   }

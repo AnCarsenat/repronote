@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>repronote — Pronote, en mieux</title>
-  <meta name="description" content="repronote : une interface gratuite et libre pour Pronote. Emploi du temps, notes, devoirs, notifications, emploi du temps partagé avec vos amis. Android, Windows, Linux.">
+  <meta name="description" content="repronote : une interface gratuite et libre pour Pronote. Emploi du temps, notes, devoirs, notifications, emploi du temps partagé avec vos amis. Android, Windows, macOS, Linux.">
   <meta property="og:title" content="repronote — Pronote, en mieux">
   <meta property="og:description" content="Emploi du temps, notes et devoirs plus lisibles, notifications, et voir quand on est libres en même temps. Gratuit, sans pub, vos données restent chez vous.">
   <meta property="og:image" content="https://ancarsenat.github.io/repronote/screenshots/accueil.png">
@@ -144,7 +144,7 @@
             </a>
             <a class="btn secondary" href="#telecharger">Toutes les versions</a>
           </div>
-          <p class="hint" id="main-dl-hint">Android, Windows et Linux. Logiciel libre (GPL-3.0).</p>
+          <p class="hint" id="main-dl-hint">Android, Windows, macOS et Linux. Logiciel libre (GPL-3.0).</p>
         </div>
         <div class="shot">
           <div class="frame">
@@ -195,6 +195,12 @@
             <p>L'installateur, puis lancez « repronote » depuis le menu Démarrer. Si SmartScreen s'affiche : « Informations complémentaires » → « Exécuter quand même ».</p>
             <a class="btn" data-asset="win-x64.exe" href="https://github.com/AnCarsenat/repronote/releases/latest">Télécharger pour Windows</a>
           </div>
+          <div class="dl" data-os="mac">
+            <h3>macOS</h3>
+            <p>Ouvrez le .dmg et glissez repronote dans Applications. L'application n'est pas signée par Apple : au premier lancement, ouvrez Réglages Système → Confidentialité et sécurité → « Ouvrir quand même ».</p>
+            <a class="btn" data-asset="mac-arm64.dmg" href="https://github.com/AnCarsenat/repronote/releases/latest">Télécharger pour Mac</a>
+            <div class="links"><a data-asset="mac-x64.dmg" href="https://github.com/AnCarsenat/repronote/releases/latest">Mac Intel (avant 2020)</a></div>
+          </div>
           <div class="dl" data-os="linux">
             <h3>Linux</h3>
             <p>En une commande (application ou serveur, avec une entrée dans le menu) :</p>
@@ -203,7 +209,7 @@
             <div class="links"><a data-asset="linux-x86_64.AppImage" href="https://github.com/AnCarsenat/repronote/releases/latest">AppImage</a><a data-asset="linux-amd64.deb" href="https://github.com/AnCarsenat/repronote/releases/latest">.deb</a><a data-asset="linux-x64.tar.gz" href="https://github.com/AnCarsenat/repronote/releases/latest">.tar.gz</a></div>
           </div>
           <div class="dl" data-os="other">
-            <h3>macOS et serveur</h3>
+            <h3>Serveur</h3>
             <p>Le serveur local s'utilise dans le navigateur, sur n'importe quel système avec Node.js 24 et Chromium.</p>
             <a class="btn secondary" data-asset="repronote-server-" href="https://github.com/AnCarsenat/repronote/releases/latest">Télécharger le serveur (.zip)</a>
             <div class="links"><a href="https://github.com/AnCarsenat/repronote#guide-détaillé">Guide d'installation</a></div>
@@ -258,9 +264,9 @@
     }
     for (const a of document.querySelectorAll('a[href$="/releases/latest"]')) a.href = RELEASE_PAGE;
     const ua = navigator.userAgent;
-    const os = /Android/i.test(ua) ? "android" : /Windows/i.test(ua) ? "windows" : /Linux|X11/i.test(ua) && !/CrOS/i.test(ua) ? "linux" : /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) ? "other" : null;
-    const labels = { android: "Télécharger pour Android", windows: "Télécharger pour Windows", linux: "Installer sur Linux", other: "Télécharger le serveur" };
-    const mainAsset = { android: "android-arm64-v8a.apk", windows: "win-x64.exe", linux: null, other: "repronote-server-" };
+    const os = /Android/i.test(ua) ? "android" : /Windows/i.test(ua) ? "windows" : /Linux|X11/i.test(ua) && !/CrOS/i.test(ua) ? "linux" : /Mac/i.test(ua) && !/iPhone|iPad/i.test(ua) && navigator.maxTouchPoints < 2 ? "mac" : null;
+    const labels = { android: "Télécharger pour Android", windows: "Télécharger pour Windows", linux: "Installer sur Linux", mac: "Télécharger pour Mac", other: "Télécharger le serveur" };
+    const mainAsset = { android: "android-arm64-v8a.apk", windows: "win-x64.exe", linux: null, mac: "mac-arm64.dmg", other: "repronote-server-" };
     if (/iPhone|iPad/i.test(ua)) document.getElementById("main-dl-hint").textContent = "Pas encore d'application iPhone : utilisez repronote sur un ordinateur, ou Android.";
     if (os) {
       document.querySelector(`.dl[data-os="${os}"]`)?.classList.add("recommended");

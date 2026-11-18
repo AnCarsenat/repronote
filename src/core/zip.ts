@@ -85,8 +85,9 @@ export function zip(entries: ZipEntry[]): Buffer {
 }
 
 /** A file name safe on Windows/Android, unique within `taken`. */
-export function safeName(name: string, taken: Set<string>): string {
-  const clean = name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").replace(/^[.\s]+|[.\s]+$/g, "").slice(0, 150) || "fichier";
+export function safeName(name: string | null | undefined, taken: Set<string>): string {
+  // Pronote may give no name (a casier entry without a label).
+  const clean = String(name ?? "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").replace(/^[.\s]+|[.\s]+$/g, "").slice(0, 150) || "fichier";
   let out = clean;
   const dot = clean.lastIndexOf(".");
   const [base, ext] = dot > 0 ? [clean.slice(0, dot), clean.slice(dot)] : [clean, ""];

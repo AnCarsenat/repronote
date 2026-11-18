@@ -37,9 +37,16 @@ function keepUnsaved(state) {
   return state;
 }
 
+// Bumped whenever a server answer to an action replaces the state: a refresh
+// that started before it carries older data and is dropped (a tick would flip back).
+let stateVersion = 0;
+
 export async function refresh() {
   try {
-    store.state = keepUnsaved(await call("/api/state"));
+    const started = stateVersion;
+    const state = await call("/api/state");
+    if (started !== stateVersion) return;
+    store.state = keepUnsaved(state);
     store.serverDown = false;
   } catch {
     store.serverDown = true;
@@ -53,6 +60,7 @@ async function runAction(kind, path) {
   emit();
   try {
     store.state = keepUnsaved(await call(path, { method: "POST" }));
+    stateVersion++;
     store.serverDown = false;
   } catch {
     store.serverDown = true;
@@ -85,6 +93,7 @@ export async function setHomeworkDone(id, done) {
       body: JSON.stringify({ done }),
     });
     store.state = keepUnsaved(result);
+    stateVersion++;
   } catch {
     if (item) {
       item.done = previous;
@@ -183,6 +192,7 @@ export async function firstLogin(url) {
   emit();
   try {
     store.state = await call("/api/login", { method: "POST", body: JSON.stringify({ url }) });
+    stateVersion++;
     store.serverDown = false;
   } catch {
     // keep the welcome screen; the caller shows an error
@@ -200,6 +210,7 @@ export async function saveNotifications(settings) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) return body.error ?? `Erreur ${res.status}`;
   store.state = keepUnsaved(body);
+  stateVersion++;
   emit();
   return null;
 }
@@ -252,5 +263,6 @@ export async function checkUpdates() {
 
 export async function saveUpdateSettings(settings) {
   store.state = keepUnsaved(await call("/api/update/settings", { method: "PUT", body: JSON.stringify(settings) }));
+  stateVersion++;
   emit();
 }

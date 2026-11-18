@@ -47,6 +47,7 @@ Le plus simple : la **[page de téléchargement](https://ancarsenat.github.io/re
 |---|---|---|
 | 📱 **Android** | `…-android-arm64-v8a.apk` | Ouvrez-le. Si le téléphone le demande, autorisez « installer des applications inconnues » pour votre navigateur. |
 | 🪟 **Windows** | `…-win-x64.exe` | Lancez-le. Si Windows affiche « Windows a protégé votre ordinateur », cliquez **Informations complémentaires** puis **Exécuter quand même** (l'application n'est pas encore signée). |
+| 🍎 **Mac** | `…-mac-arm64.dmg` (Mac Intel d'avant 2020 : `…-mac-x64.dmg`) | Ouvrez-le et glissez repronote dans **Applications**. Au premier lancement, macOS refuse de l'ouvrir (l'application n'est pas signée par Apple) : **Réglages Système → Confidentialité et sécurité → Ouvrir quand même**. Voir [macOS](#macos) si besoin. |
 | 🐧 **Linux** (Ubuntu, Mint, Debian…) | `…-linux-amd64.deb` | Double-cliquez dessus pour l'installer. |
 | 🐧 **Linux** (autre) | `…-linux-x86_64.AppImage` | Clic droit → Propriétés → « Autoriser l'exécution », puis double-clic. |
 | 🐧 **Linux**, en une commande | — | Dans un terminal : `curl -fsSL https://github.com/AnCarsenat/repronote/releases/latest/download/install-linux.sh \| bash`. Il vous demande : l'application, ou le serveur (à utiliser dans votre navigateur). |
@@ -76,6 +77,8 @@ C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT
 | Fichier | Pour |
 |---|---|
 | `repronote-…-win-x64.exe` | Windows (installateur) |
+| `repronote-…-mac-arm64.dmg` | Mac Apple Silicon (M1 et plus récents) |
+| `repronote-…-mac-x64.dmg` | Mac Intel |
 | `install-linux.sh` | Linux : installe la dernière version avec une entrée dans le menu des applications — l'application (`--app`) ou le serveur (`--server`, voir plus bas) |
 | `repronote-…-linux-x86_64.AppImage` | Linux, toutes distributions (pas besoin de `fuse2`/`libfuse2`) |
 | `repronote-…-linux-amd64.deb` | Debian, Ubuntu, Mint… |
@@ -84,6 +87,15 @@ C'est tout. Les fois suivantes, repronote se reconnecte tout seul tant que l'ENT
 | `repronote-…-android-armeabi-v7a.apk` | Anciens téléphones Android 32 bits |
 | `repronote-…-android-x86_64.apk` | Émulateurs Android, Chromebooks x86 |
 | `repronote-server-….zip` | Le serveur seul (Node ≥ 24 + Chromium), pour un serveur ou un Raspberry Pi |
+
+## macOS
+
+L'application Mac n'est pas signée par Apple (il faudrait un compte développeur payant) ; elle a une signature « ad hoc », ce qui suffit pour qu'elle tourne. Au premier lancement :
+
+1. Double-cliquez sur repronote dans Applications : macOS dit qu'il ne peut pas vérifier l'application. Cliquez **OK** (pas « Placer dans la corbeille »).
+2. **Réglages Système → Confidentialité et sécurité**, en bas : **Ouvrir quand même**, puis confirmez.
+
+Si macOS dit que l'application est « endommagée », dans le Terminal : `xattr -dr com.apple.quarantine /Applications/repronote.app`, puis relancez. Les données sont dans `~/Library/Application Support/repronote/data`.
 
 ## Le serveur seul sur Linux
 
@@ -106,8 +118,9 @@ repronote demande à GitHub, au démarrage puis deux fois par jour, s'il existe 
 
 | Vous avez… | Pour mettre à jour |
 |---|---|
-| Android | Téléchargez l'APK et ouvrez-le : il s'installe par-dessus, vos données restent. |
+| Android | Téléchargez l'APK et ouvrez-le : il s'installe par-dessus, vos données restent. **Depuis la 0.3.0 ou avant** : désinstallez d'abord l'ancienne application une fois (sinon « Application non installée » et l'ancienne version reste), puis reconnectez-vous. |
 | Windows | Lancez le nouvel installateur. |
+| Mac | Ouvrez le nouveau .dmg et glissez repronote dans Applications (remplacer). |
 | Linux (AppImage, .deb) | Téléchargez le nouveau fichier, ou relancez la commande d'installation. |
 | Serveur installé par le script | `repronote-server --update` |
 
@@ -197,7 +210,7 @@ Le serveur local expose une API JSON. `GET /api` en donne la liste.
 | POST | `/api/notifications/test` | Envoie une notification de test partout |
 | GET | `/api/export` | Toutes les données en un fichier JSON |
 | GET | `/api/documents.zip` | Tous les documents (bulletins, casier, pièces jointes) en un ZIP |
-| PUT | `/api/plugins/:id` | Données d'un plugin (1 Mo max) |
+| PUT | `/api/plugins/:id` | Données d'un plugin (3 Mo max) |
 | POST | `/api/download` | Transforme un contenu généré en téléchargement (`GET /api/download/:id`, 10 min) — utilisé là où les téléchargements `blob:` ne marchent pas (Android) |
 | POST | `/api/update/check` | Vérifier maintenant s'il existe une nouvelle version |
 | PUT | `/api/update/settings` | `{ "enabled": true, "channel": "stable" \| "dev" }` |
@@ -284,6 +297,7 @@ Pour contribuer (humains comme assistants IA) : **[AGENTS.md](AGENTS.md)**, puis
 | `npm run build` | `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs`, `dist/android.mjs` (esbuild) |
 | `npm run dist:linux` | AppImage + .deb + .tar.gz dans `release/` |
 | `npm run dist:win` | installateur Windows (sur Windows) |
+| `npm run dist:mac` | .dmg arm64 + x64 (sur un Mac, signature ad hoc) |
 | `npm run dist:server` | `release/repronote-server/` |
 | `node scripts/demo-data.mjs <dossier>` | Données inventées pour essayer ou faire des captures : `REPRONOTE_DATA_DIR=<dossier> npm run serve` |
 | `node scripts/screenshots.mjs <url> docs/screenshots` | Les captures de ce README |

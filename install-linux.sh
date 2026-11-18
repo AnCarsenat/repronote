@@ -55,7 +55,12 @@ die() { echo "Erreur : $*" >&2; exit 1; }
 # Questions read the terminal even when the script comes from `curl … | bash`.
 ask() {
   local answer=""
-  if [[ -r /dev/tty ]]; then read -r -p "$1" answer </dev/tty || true; fi
+  # /dev/tty can exist but fail to open (no controlling terminal: cron, CI, IDE
+  # tasks, Claude Code's `!`): then keep the default answer, without an error.
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    read -r -u 3 -p "$1" answer || true
+    exec 3<&-
+  fi
   printf '%s' "$answer"
 }
 
@@ -100,6 +105,10 @@ fi
 
 if [[ -n "$SUDO" ]]; then
   say "Les droits administrateur sont nécessaires pour installer dans $PREFIX et $OPT_DIR."
+  if ! { exec 3</dev/tty; } 2>/dev/null; then
+    die "pas de terminal pour demander le mot de passe administrateur. Lancez la commande dans un terminal, ou installez pour vous seul : PREFIX=~/.local OPT_DIR=~/.local/opt (voir le README)."
+  fi
+  exec 3<&-
   sudo -v || die "impossible d'obtenir les droits administrateur."
 fi
 
@@ -185,7 +194,8 @@ case "\${1:-}" in
     exit 0 ;;
   --update)
     # Same installer, same choices (server, channel); the server restarts after.
-    curl -fsSL "https://github.com/$REPO/releases/latest/download/install-linux.sh" | bash -s -- --server --no-autostart \$([[ "\$REPRONOTE_CHANNEL" == dev ]] && echo --dev)
+    if [[ "\$REPRONOTE_CHANNEL" == dev ]]; then from=download/dev; flag=--dev; else from=latest/download; flag=; fi
+    curl -fsSL "https://github.com/$REPO/releases/\$from/install-linux.sh" | bash -s -- --server --no-autostart \$flag
     systemctl --user try-restart repronote.service 2>/dev/null || true
     exit 0 ;;
 esac

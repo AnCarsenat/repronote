@@ -52,6 +52,8 @@ type Captured = {
   /** Short log of the page's Pronote traffic, for error reports. */
   trace: string[];
   lastActivity: number;
+  /** A reason the login can't work, found while watching (thrown by waitUntilReady). */
+  fatal?: Error;
 };
 
 type FrozenCommunication = {
@@ -162,7 +164,11 @@ function watchPronoteTraffic(page: DriverPage): Captured {
         captured.trace.push(`${body.id ?? body.nom ?? "?"} ${res.status}${body.Erreur ? ` Erreur=${JSON.stringify(body.Erreur).slice(0, 150)}` : ""}`);
         const data = body.dataSec ?? body.donneesSec;
         if (typeof data === "string") {
-          throw new Error("This Pronote server encrypts its traffic; not supported yet.");
+          // Not thrown here: this callback's promise isn't awaited by the drivers,
+          // so a throw would be an unhandled rejection that kills the process.
+          // waitUntilReady reports it as the login failure instead.
+          captured.fatal = new Error("This Pronote server encrypts its traffic; not supported yet.");
+          return;
         }
         if (body.id === "FonctionParametres" || body.nom === "FonctionParametres") {
           captured.instanceParameters = data?.data ?? data?.donnees;
@@ -172,8 +178,7 @@ function watchPronoteTraffic(page: DriverPage): Captured {
           captured.userLoaded = true;
         }
       }
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("not supported")) throw err;
+    } catch {
       // Body unavailable (redirects etc.): ignore.
     } finally {
       done(url);
@@ -189,6 +194,7 @@ async function waitUntilReady(page: DriverPage, captured: Captured, interactive:
   page.onClose(() => (closed = true));
 
   while (Date.now() < deadline) {
+    if (captured.fatal) throw captured.fatal;
     if (closed) throw new Error("Browser window closed before login finished.");
     if (captured.userLoaded && captured.pending === 0 && Date.now() - captured.lastActivity > IDLE_MS) {
       return;

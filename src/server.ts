@@ -51,7 +51,7 @@ const API_INDEX = {
     { method: "POST", path: "/api/update/check", description: "Check GitHub for a newer version now. Returns the result (also in /api/state under update)." },
     { method: "PUT", path: "/api/update/settings", body: "{ enabled: boolean, channel: 'stable'|'dev' }", description: "Automatic update checks and release channel." },
     { method: "GET", path: "/api/documents.zip", description: "Every document (report cards, casier, homework and news attachments) in one ZIP file." },
-    { method: "PUT", path: "/api/plugins/:id", body: "any JSON (max 1 MB)", description: "Data saved by a plugin (e.g. friends' timetables). Returned in /api/state under plugins." },
+    { method: "PUT", path: "/api/plugins/:id", body: "any JSON (max 3 MB)", description: "Data saved by a plugin (e.g. friends' timetables). Returned in /api/state under plugins." },
     { method: "POST", path: "/api/download", body: "{ name, type, content, encoding?: 'base64' }", description: "Turns generated content into a download link (GET /api/download/:id, valid 10 minutes); used where blob downloads don't work (Android)." },
     { method: "POST", path: "/mcp", description: "MCP endpoint (Streamable HTTP) for AI assistants: homework, timetable, grades, news, notebook, documents tools." },
   ],
@@ -77,7 +77,16 @@ function classify(err: unknown): SyncStatus {
   return { at: Date.now(), ok: false, errorKind: "error", message };
 }
 
+let syncingInteractive = false;
+
 function sync(interactive = false, url?: string): Promise<SyncStatus> {
+  // A login request (button, new address) must not get the answer of a
+  // background sync already running (it would just say "log in again"):
+  // let that one finish, then run the interactive one.
+  if (syncing && interactive && (!syncingInteractive || url)) {
+    return syncing.catch(() => null).then(() => sync(interactive, url));
+  }
+  if (!syncing) syncingInteractive = interactive;
   syncing ??= (async () => {
     let status: SyncStatus;
     const before = notify.takeSnapshot(store);
@@ -128,7 +137,10 @@ async function setHomeworkDone(id: string, done: boolean): Promise<{ queued: boo
     });
     return { queued: false };
   } catch {
-    store.addPending("homeworkDone", { id, done });
+    // Ids change every session: keep what identifies the homework later on.
+    const item = (store.get<any[]>("homework") ?? []).find((a) => a.id === id)
+      ?? Object.values(store.get<Record<string, any>>("homeworkArchive") ?? {}).find((a) => a.id === id);
+    store.addPending("homeworkDone", item ? { id, done, key: homeworkKey(item), deadline: item.deadline } : { id, done });
     applyPendingToSnapshot(store);
     return { queued: true };
   }
@@ -160,14 +172,30 @@ const bulletinURL = async (session: pronote.SessionHandle, b: { ident: string; f
   return path ? `${session.information.url}/${encodeURI(path)}` : null;
 };
 
+/**
+ * Files from Pronote (uploaded by anyone at school) and generated downloads are
+ * served from the app's own origin, where a script could read the whole API.
+ * So they never run: a CSP sandbox (opaque origin, no scripts), no type sniffing,
+ * and only types that can't carry script are shown inline (no SVG, HTML, XML).
+ */
+// Chromium's PDF viewer refuses to run in a CSP sandbox, and it can't run the
+// page's scripts anyway, so PDFs only get nosniff.
+const untrustedFileHeaders = (type: string): Record<string, string> => ({
+  "X-Content-Type-Options": "nosniff",
+  ...(/^application\/pdf/i.test(type.trim()) ? {} : { "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'" }),
+});
+const inlineSafe = (type: string) =>
+  /^(application\/pdf|image\/(png|jpe?g|gif|webp|bmp|avif)|text\/plain|audio\/|video\/)/i.test(type.trim());
+
 /** Serves a cached file, or fetches it from a fresh Pronote URL and caches it. */
 async function serveCached(res: ServerResponse, key: string, name: string, produce: () => Promise<string | null>) {
   const file = await getFile(key, name, produce);
   if (file) {
     res.writeHead(200, {
       "Content-Type": file.type,
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "Content-Disposition": `${inlineSafe(file.type) ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(name)}`,
       "Cache-Control": "private, max-age=86400",
+      ...untrustedFileHeaders(file.type),
     });
     return res.end(file.body);
   }
@@ -295,7 +323,7 @@ const state = () => ({
  * - DNS rebinding: a site's domain re-pointed at 127.0.0.1 could read the API.
  *   When bound to localhost, only accept Host headers naming localhost.
  * - CSRF: a site could POST "simple" requests (no CORS preflight). Reject
- *   state-changing requests whose Origin isn't this server.
+ *   state-changing requests whose Origin isn't this server (including "null").
  */
 /**
  * Android: other apps on the phone can reach localhost too, so the app gives
@@ -315,15 +343,20 @@ function allowedRequest(req: IncomingMessage): boolean {
   const host = req.headers.host ?? "";
   const local = HOST === "127.0.0.1" || HOST === "localhost";
   if (local && !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host)) return false;
+  if (req.method === "GET" || req.method === "HEAD") return true;
+  // Browsers send Fetch Metadata with every request: anything not from our own
+  // pages (or typed by the user) is refused.
+  const site = req.headers["sec-fetch-site"];
+  if (site && site !== "same-origin" && site !== "none") return false;
   const origin = req.headers.origin;
-  if (req.method !== "GET" && req.method !== "HEAD" && origin && origin !== "null") {
-    try {
-      if (new URL(origin).host !== host) return false;
-    } catch {
-      return false;
-    }
+  // "null" is what sandboxed frames and data: pages send: any website can make
+  // one, so it is not "our page". No Origin at all: a non-browser client (curl, MCP).
+  if (origin === undefined) return true;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
   }
-  return true;
 }
 
 /** Contacts with the addresses found through the webmail (if looked up). */
@@ -334,6 +367,41 @@ function withEmails(contacts: any[]): any[] {
     email: c.email || found[c.name]?.email || "",
     emailCandidates: found[c.name]?.email ? [] : found[c.name]?.candidates ?? [],
   }));
+}
+
+/** Everyone you can message in Pronote (teachers, staff, pupils, parents), saved as "contacts". */
+async function fetchContacts(): Promise<any[]> {
+  const contacts = await live.use(async (session) => {
+    const out: any[] = [];
+    const kinds: Array<[number, string]> = [[3, "Professeur"], [34, "Personnel"], [4, "Élève"], [5, "Responsable"]];
+    for (const [kind, label] of kinds) {
+      let raw: any;
+      try {
+        raw = await rawRequest(session, "ListeRessourcesPourCommunication", {
+          filtreElement: { G: session.userResource.kind, L: session.userResource.name, N: session.userResource.id },
+          onglet: { N: 0, G: kind },
+        }, pronote.TabLocation.Discussions);
+      } catch {
+        continue; // not allowed for this account
+      }
+      for (const r of raw?.listeRessourcesPourCommunication?.V ?? []) {
+        const subjects = (r.listeRessources?.V ?? []).filter((x: any) => !x.estUneSousMatiere).map((x: any) => x.L);
+        const mails = Object.entries(r).filter(([k, v]) => /mail/i.test(k) && typeof v === "string" && v).map(([, v]) => v);
+        out.push({
+          type: label,
+          name: r.L,
+          function: r.fonction?.V?.L ?? "",
+          subjects: subjects.join(", "),
+          principal: Boolean(r.estPrincipal),
+          canMessage: Boolean(r.avecDiscussion),
+          email: mails.join(", "),
+        });
+      }
+    }
+    return out;
+  });
+  store.put("contacts", contacts);
+  return contacts;
 }
 
 /** MCP over HTTP (stateless): AI assistants connect to http://127.0.0.1:<port>/mcp. */
@@ -472,7 +540,9 @@ const server = createServer(async (req, res) => {
     // (the user logs in to the webmail in a window). One lookup per person.
     if (url.pathname === "/api/contacts/emails" && req.method === "POST") {
       let contacts = store.get<any[]>("contacts");
-      if (!contacts?.length) contacts = await (await fetch(`${selfURL}/api/contacts`)).json().catch(() => []);
+      // Called directly, not through HTTP: on Android a request to ourselves
+      // would lack the access-token cookie.
+      if (!contacts?.length) contacts = await fetchContacts().catch(() => []);
       const names = (contacts ?? []).filter((c: any) => c.type === "Professeur" || c.type === "Personnel").map((c: any) => c.name);
       if (!names.length) return json(res, { error: "Annuaire vide : affichez d'abord l'annuaire." }, 400);
       try {
@@ -486,36 +556,7 @@ const server = createServer(async (req, res) => {
     // Everyone you can message in Pronote (teachers, staff...), as JSON or CSV.
     if ((url.pathname === "/api/contacts" || url.pathname === "/api/contacts.csv") && req.method === "GET") {
       try {
-        const contacts = await live.use(async (session) => {
-          const out: any[] = [];
-          const kinds: Array<[number, string]> = [[3, "Professeur"], [34, "Personnel"], [4, "Élève"], [5, "Responsable"]];
-          for (const [kind, label] of kinds) {
-            let raw: any;
-            try {
-              raw = await rawRequest(session, "ListeRessourcesPourCommunication", {
-                filtreElement: { G: session.userResource.kind, L: session.userResource.name, N: session.userResource.id },
-                onglet: { N: 0, G: kind },
-              }, pronote.TabLocation.Discussions);
-            } catch {
-              continue; // not allowed for this account
-            }
-            for (const r of raw?.listeRessourcesPourCommunication?.V ?? []) {
-              const subjects = (r.listeRessources?.V ?? []).filter((x: any) => !x.estUneSousMatiere).map((x: any) => x.L);
-              const mails = Object.entries(r).filter(([k, v]) => /mail/i.test(k) && typeof v === "string" && v).map(([, v]) => v);
-              out.push({
-                type: label,
-                name: r.L,
-                function: r.fonction?.V?.L ?? "",
-                subjects: subjects.join(", "),
-                principal: Boolean(r.estPrincipal),
-                canMessage: Boolean(r.avecDiscussion),
-                email: mails.join(", "),
-              });
-            }
-          }
-          return out;
-        });
-        store.put("contacts", contacts);
+        const contacts = await fetchContacts();
         const rowsWithEmails = withEmails(contacts);
         if (url.pathname.endsWith(".csv")) {
           const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -572,7 +613,9 @@ const server = createServer(async (req, res) => {
     const plugin = url.pathname.match(/^\/api\/plugins\/([a-z0-9-]{1,40})$/);
     if (plugin && req.method === "PUT") {
       const value = await readJson(req);
-      if (JSON.stringify(value).length > 1024 * 1024) return json(res, { error: "Données trop volumineuses (1 Mo max)" }, 413);
+      // A GitHub plugin saves its code (500 kB, larger once JSON-escaped) with
+      // its storage (900 kB) in one value.
+      if (JSON.stringify(value).length > 3 * 1024 * 1024) return json(res, { error: "Données trop volumineuses (3 Mo max)" }, 413);
       store.setSetting("plugins", { ...(store.getSetting<Record<string, unknown>>("plugins") ?? {}), [plugin[1]]: value });
       return json(res, { ok: true });
     }
@@ -592,6 +635,7 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, {
         "Content-Type": file.type,
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        ...untrustedFileHeaders(file.type),
         "Cache-Control": "no-store",
       });
       return res.end(file.body);

@@ -21,7 +21,7 @@ export type SyncStatus = {
   message?: string;
 };
 
-export type PendingAction = { id: number; type: "homeworkDone"; payload: { id: string; done: boolean }; createdAt: number };
+export type PendingAction = { id: number; type: "homeworkDone"; payload: { id: string; done: boolean; key?: string; deadline?: string }; createdAt: number };
 
 /** What a storage engine provides; Store adds the logic on top. */
 interface Backend {

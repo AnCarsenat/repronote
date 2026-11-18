@@ -5,7 +5,7 @@ repronote is a **local server** (Node, TypeScript run directly by Node ≥ 24) t
 | Shell | Entry point | Login browser | Data folder |
 |---|---|---|---|
 | Server (`npm run serve`, server zip, `install-linux.sh --server`) | `src/serve.ts` → `src/server.ts` | Playwright + system Chromium (`src/core/playwright-driver.ts`) | `REPRONOTE_DATA_DIR` or `./data` |
-| Desktop app (Electron; AppImage, deb, exe) | `src/electron/main.ts` | Electron windows (`src/electron/electron-driver.ts`) | `~/.config/repronote/data`, `%APPDATA%\repronote\data` |
+| Desktop app (Electron; AppImage, deb, exe, dmg) | `src/electron/main.ts` | Electron windows (`src/electron/electron-driver.ts`) | `~/.config/repronote/data`, `%APPDATA%\repronote\data`, `~/Library/Application Support/repronote/data` |
 | Android app | `android/` (Java) runs `dist/android.mjs` from `src/android/main.ts` in nodejs-mobile (Node 18) | A second WebView driven over DevTools (`src/android/android-driver.ts`) | the app's files dir |
 
 ```
@@ -58,7 +58,7 @@ After each sync, `src/notify/notifications.ts` diffs the snapshots before/after 
 
 ## Updates (`src/core/updates.ts`, `src/core/version.ts`)
 
-The version and channel are baked into bundles by esbuild (`scripts/build.mjs` reads `REPRONOTE_VERSION` / `REPRONOTE_CHANNEL` set by CI) and read from `package.json` when running from source. Each shell sets `REPRONOTE_PLATFORM` (`android`, `desktop-windows`, `desktop-appimage`, `desktop-deb`, `desktop-linux`, `server-installed`, `server`). The server asks GitHub's releases API at start and every 12 h (`stable`: latest normal release; `dev`: the rolling `dev` pre-release), picks the asset for the platform, and exposes the result in `/api/state.update`. Nothing installs itself: the UI (`web/updates.js`) shows a banner and the right download or command. See [releases.md](releases.md).
+The version and channel are baked into bundles by esbuild (`scripts/build.mjs` reads `REPRONOTE_VERSION` / `REPRONOTE_CHANNEL` set by CI) and read from `package.json` when running from source. Each shell sets `REPRONOTE_PLATFORM` (`android`, `desktop-windows`, `desktop-mac`, `desktop-appimage`, `desktop-deb`, `desktop-linux`, `server-installed`, `server`). The server asks GitHub's releases API at start and every 12 h (`stable`: latest normal release; `dev`: the rolling `dev` pre-release), picks the asset for the platform, and exposes the result in `/api/state.update`. Nothing installs itself: the UI (`web/updates.js`) shows a banner and the right download or command. See [releases.md](releases.md).
 
 ## Web UI (`web/`)
 
@@ -72,7 +72,7 @@ The version and channel are baked into bundles by esbuild (`scripts/build.mjs` r
 
 ### Community plugins and widgets (`web/plugins/github.js`, `web/plugins/sandbox.js`)
 
-Found on GitHub by topic (`repronote-plugin`, `repronote-widget`), installed **pinned to a commit**, code stored as plugin data on the server. They run in `<iframe sandbox="allow-scripts">` (opaque origin) whose document has a CSP without network access; they receive only the data kinds their manifest lists (approved at install) via `postMessage`, and can save their own storage and offer downloads. Authoring guide: [plugins.md](plugins.md).
+Found on GitHub by topic (`repronote-plugin`, `repronote-widget`), installed **pinned to a commit**, code stored as plugin data on the server. Their code runs in a Worker inside an `<iframe sandbox="allow-scripts">` (opaque origin) whose CSP allows no network and only our nonce'd bootstrap script. A frame can always navigate itself (a way to leak data CSP can't block); a Worker can't. The plugin renders HTML (`repronote.render`), which the bootstrap sanitizes (allow-listed tags and attributes, no `href`) before showing it, and clicks on `data-action` elements are sent back to the Worker; they receive only the data kinds their manifest lists (approved at install) via `postMessage`, and can save their own storage and offer downloads. Authoring guide: [plugins.md](plugins.md).
 
 ## Desktop (`src/electron/`)
 
@@ -86,4 +86,4 @@ Found on GitHub by topic (`repronote-plugin`, `repronote-widget`), installed **p
 
 ## Build and CI
 
-`scripts/build.mjs` bundles `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs`, `dist/android.mjs` (Node 18 target). `.github/workflows/build.yml` type-checks, builds the server zip, desktop apps, APKs, runs an Android emulator smoke test (real login on Pronote's demo site), and publishes releases. `.github/workflows/pages.yml` publishes the download pages. Details: [releases.md](releases.md).
+`scripts/build.mjs` bundles `dist/server.mjs`, `dist/electron-main.mjs`, `dist/mcp.mjs`, `dist/android.mjs` (Node 18 target). `.github/workflows/build.yml` type-checks, builds the server zip, desktop apps (Linux, Windows, macOS ad-hoc signed), APKs, runs an Android emulator smoke test (real login on Pronote's demo site), and publishes releases. `.github/workflows/pages.yml` publishes the download pages. Details: [releases.md](releases.md).

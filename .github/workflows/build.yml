@@ -1,4 +1,4 @@
-# Builds the desktop apps (Linux, Windows), the Android app and the standalone Node server.
+# Builds the desktop apps (Linux, Windows, macOS), the Android app and the standalone Node server.
 # - Every push / pull request: build and keep the files as workflow artifacts.
 # - Push to dev: also publish them as the rolling "dev" pre-release (version X.Y.Z-dev.<run>).
 # - A version tag (vX.Y.Z, from main): publish them as a stable GitHub release.
@@ -66,6 +66,11 @@ jobs:
           - os: windows-latest
             target: win
             files: release/*.exe
+          # Apple Silicon runner; builds both arm64 and x64 .dmg. No Apple Developer
+          # certificate: the app is ad-hoc signed (scripts/mac-adhoc-sign.cjs).
+          - os: macos-latest
+            target: mac
+            files: release/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +83,7 @@ jobs:
         shell: bash
       - run: npm run dist:${{ matrix.target }}
         env:
-          # No code signing yet: Windows will show a SmartScreen warning.
+          # No code signing yet: Windows shows a SmartScreen warning, macOS a Gatekeeper one.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - uses: actions/upload-artifact@v4
         with:
@@ -115,6 +120,9 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Published builds (dev pre-release, tags) must carry the release key,
+          # or they can't install over the app people have (build.gradle checks).
+          REPRONOTE_REQUIRE_SIGNING: ${{ (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v')) && '1' || '' }}
         run: |
           VERSION=$(node -p "require('../package.json').version")
           ./gradlew assembleRelease --no-daemon -PversionName="$VERSION" -PversionCode="${{ github.run_number }}"

@@ -14,6 +14,7 @@ const dismissed = () => {
 const HOW = {
   android: "Téléchargez l'APK puis ouvrez-le : il s'installe par-dessus l'ancienne version, vos données restent.",
   "desktop-windows": "Téléchargez l'installateur et lancez-le : il remplace l'ancienne version, vos données restent.",
+  "desktop-mac": "Téléchargez le .dmg, ouvrez-le et glissez repronote dans Applications pour remplacer l'ancienne version : vos données restent.",
   "desktop-appimage": "Téléchargez la nouvelle AppImage et remplacez l'ancienne (ou relancez la commande d'installation Linux).",
   "desktop-deb": "Téléchargez le paquet .deb et installez-le par-dessus l'ancien.",
   "desktop-linux": "Téléchargez l'archive et remplacez l'ancien dossier.",
