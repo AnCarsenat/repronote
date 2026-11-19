@@ -1,3 +1,4 @@
+import "./core/system-ca.ts"; // first: trust the system CA store (school HTTPS proxies)
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { randomUUID, timingSafeEqual } from "node:crypto";

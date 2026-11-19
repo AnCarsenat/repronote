@@ -104,7 +104,7 @@ Write throwaway test scripts in a scratch folder, not in the repo.
   - Later rules win: a generic `.segmented { display: … }` defined later overrode an earlier `.tt-span { display: none }`. Prefer more specific selectors to fix precedence.
 - **Pronote ids change every session.** Match homework, news and grades by content keys, never by `id` across syncs.
 - **The ENT keeps you logged in with session cookies.** Closing the login browser drops them; `session-cookies.ts` saves and restores them. Don't remove it.
-- **Sandboxed environments** (like the one an agent may run in) can intercept HTTPS with their own CA: Node's `fetch` then fails with `SELF_SIGNED_CERT_IN_CHAIN` while `curl` works. Use `NODE_USE_SYSTEM_CA=1` for local testing; it is not a bug in the app.
+- **Sandboxed environments** (like the one an agent may run in) can intercept HTTPS with their own CA: Node's `fetch` then fails with `SELF_SIGNED_CERT_IN_CHAIN` while `curl` works. School networks do the same (Île-de-France lycées: "RIDF Lycees - Root CA"), so `src/core/system-ca.ts` (imported first by `server.ts`) adds the system certificates to Node's list. Keep it first.
 - **Downloads:** `blob:` downloads don't work in the Android WebView. Use `downloadFile()` from `web/state.js` (goes through `/api/download`).
 - **Mobile layout:** test at 390 px. The tab bar collapses into « Plus »; the timetable shows 1/3/5 days; widgets move by touch-dragging the ⋮⋮ grip.
 - **Accessibility:**
