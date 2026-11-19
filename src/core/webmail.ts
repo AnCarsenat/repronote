@@ -97,7 +97,7 @@ export async function lookupEmails(names: string[], onProgress?: (msg: string) =
 // when the ENT still has a session (a window only when a login is needed), and
 // kept for a few minutes, so a search is one or two directory requests. Better
 // matching: every word typed counts (accents and case ignored, initials, the
-// e-mail address too), and results are ranked.
+// e-mail address too), and results are ranked (nothing the directory returns is hidden).
 //
 // Still the webmail's own autocomplete, used the way a person would: one query
 // typed by the user, at most 2 requests per search, spaced out, a cap per
@@ -244,11 +244,12 @@ export function searchEmail(query: string): Promise<EmailSearchResult[]> {
       for (const w of long.slice(0, 2)) {
         for (const r of await ask(typed.find((t) => norm(t) === w) ?? w)) byEmail.set(r.email.toLowerCase(), r);
       }
+      // Nobody the directory returned is dropped (it may match on fields or
+      // spellings we don't see): people matching every word come first.
       const ranked = [...byEmail.values()]
         .map((r) => ({ name: r.displayName, email: r.email, type: r.type, score: scoreEntry(r, words) }))
-        .filter((r) => r.score > 0)
         .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-      console.log(`[email-search] ${byEmail.size} people, ${ranked.length} matching every word`);
+      console.log(`[email-search] ${byEmail.size} people, ${ranked.filter((r) => r.score > 0).length} matching every word`);
       return ranked.slice(0, 15);
     } catch (err) {
       await closeWebmail(); // logged out, page gone…: start fresh next time

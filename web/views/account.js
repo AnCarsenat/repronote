@@ -96,7 +96,7 @@ export default {
         find.results
           ? find.results.length
             ? h("ul", { class: "email-results", "aria-live": "polite", "aria-label": `${find.results.length} résultat(s)` },
-                find.results.map((r, i) => h("li", { class: i === 0 && (find.results.length === 1 || r.score > find.results[1].score) ? "best" : "" },
+                find.results.map((r, i) => h("li", { class: i === 0 && r.score > 0 && (find.results.length === 1 || r.score > find.results[1].score) ? "best" : "" },
                   h("div", {}, h("strong", {}, r.name), r.type ? h("span", { class: "muted small" }, ` · ${r.type}`) : null),
                   h("div", { class: "copy-row" }, h("a", { href: `mailto:${r.email}` }, r.email), copyBtn(r.email)))))
             : h("p", { class: "muted small", "aria-live": "polite" }, `Personne trouvé pour « ${find.searched} ». Essayez le nom seul, ou une autre orthographe.`)
