@@ -36,18 +36,20 @@ Job `release-dev` in `.github/workflows/build.yml`: after a successful build of 
 
 `.github/workflows/pages.yml` runs when `site/` (or the screenshots) change on either branch. It checks out **both** branches and publishes `main`'s `site/` at the root and `dev`'s `site/` under `/dev/`. The page reads the matching release from the GitHub API (`/releases/latest` or `/releases/tags/dev`) and picks the right file for the visitor's device. Pages must be enabled once with "GitHub Actions" as the source (Settings → Pages, or `gh api -X POST repos/AnCarsenat/repronote/pages -f build_type=workflow`).
 
-## Update checks in the apps
+## Updates in the apps
 
-`src/core/updates.ts` asks `GET /repos/AnCarsenat/repronote/releases`: channel `stable` takes the first non-pre-release, channel `dev` the `dev` pre-release (its version is read from its title). The user picks the channel in Réglages → À propos. Nothing is installed automatically; per platform:
+`src/core/updates.ts` asks `GET /repos/AnCarsenat/repronote/releases`: channel `stable` takes the first non-pre-release, channel `dev` the highest of the `dev` pre-release (version read from its title) and the latest release. The user picks the channel in Réglages → À propos.
 
-| Platform | Offered | How it installs |
+With **Installer automatiquement** on (default), a newer version is downloaded into `DATA_DIR/updates`, checked against the asset's `digest` (`sha256:…`, from the releases API; no digest = no automatic install), and handed to the installer the shell registered with `setUpdateInstaller`. A failed version isn't retried automatically (`updateFailed`); « Installer » retries. Installers replace the program only, never the data:
+
+| Platform | File | Installer |
 |---|---|---|
-| Android | the APK for the phone's ABI | opened by the system installer, over the old app — **requires the same signing key** (below) |
-| Windows | `win-x64.exe` | NSIS installer over the old version |
-| macOS | `mac-arm64.dmg` / `mac-x64.dmg` (by `process.arch`) | drag into Applications over the old app; no Apple certificate, ad-hoc signed by `scripts/mac-adhoc-sign.cjs`, so Gatekeeper asks once (README « macOS ») |
-| Linux AppImage / deb / tar.gz | the same kind of file | replace / install the package |
-| Server from `install-linux.sh` | the command; `repronote-server --update` | re-runs the installer (keeps the channel) |
-| Server zip / source | the zip | replace the folder / `git pull` |
+| Android | the APK for the phone's ABI | `Updater.java`: PackageInstaller session (first time: "install unknown apps" permission + confirmation; Android 12+ then `USER_ACTION_NOT_REQUIRED`). **Requires the same signing key** (below) |
+| Windows | `win-x64.exe` | `src/electron/update.ts`: NSIS `/S --updated --force-run`, app quits |
+| macOS | `mac-arm64.dmg` / `mac-x64.dmg` | mounts the dmg, `ditto` the .app next to the old one, swaps it after quitting, reopens |
+| Linux AppImage / deb / tar.gz | the same kind of file | replace `$APPIMAGE` / `pkexec dpkg -i` / replace the folder, then relaunch |
+| Server (`install-linux.sh`, zip) | `repronote-server-*.zip` | `src/core/server-update.ts`: unzips (`src/core/unzip.ts`) over `dist/`, `web/`… (rollback on error, `npm install` if dependencies changed), restarts: exit 75 under systemd (`REPRONOTE_SUPERVISED`), else a detached copy (pid in `REPRONOTE_PID_FILE`) |
+| Source checkout | — | not automatic (`git pull`) |
 
 ## Android signing
 

@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { rawRequest } from "./core/raw-request.ts";
 import { attachmentURL } from "./core/attachments.ts";
@@ -17,9 +17,10 @@ import { newsKey } from "./core/browser-session.ts";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "./mcp/tools.ts";
 import * as notify from "./notify/notifications.ts";
-import { lookupEmails, type EmailLookup } from "./core/webmail.ts";
+import { lookupEmails, searchEmail, type EmailLookup } from "./core/webmail.ts";
 import { zip, safeName, type ZipEntry } from "./core/zip.ts";
-import { checkForUpdates, lastUpdateInfo, scheduleUpdateChecks, updateSettings } from "./core/updates.ts";
+import { checkForUpdates, installUpdate, lastUpdateInfo, scheduleUpdateChecks, setUpdateInstaller, updateSettings } from "./core/updates.ts";
+import { serverInstaller } from "./core/server-update.ts";
 import { CHANNEL, PLATFORM, VERSION } from "./core/version.ts";
 
 const PORT = Number(process.env.PORT ?? 4173);
@@ -49,9 +50,11 @@ const API_INDEX = {
     { method: "GET", path: "/api/contacts", description: "Everyone you can message in Pronote (teachers, staff...). /api/contacts.csv for a spreadsheet." },
     { method: "GET", path: "/api/export", description: "All data as one JSON file." },
     { method: "POST", path: "/api/update/check", description: "Check GitHub for a newer version now. Returns the result (also in /api/state under update)." },
-    { method: "PUT", path: "/api/update/settings", body: "{ enabled: boolean, channel: 'stable'|'dev' }", description: "Automatic update checks and release channel." },
+    { method: "PUT", path: "/api/update/settings", body: "{ enabled: boolean, channel: 'stable'|'dev', auto?: boolean }", description: "Update checks, release channel, and automatic installation." },
+    { method: "POST", path: "/api/update/install", description: "Download (checked against GitHub's SHA-256) and install the newer version found, then restart. Data is kept." },
     { method: "GET", path: "/api/documents.zip", description: "Every document (report cards, casier, homework and news attachments) in one ZIP file." },
     { method: "PUT", path: "/api/plugins/:id", body: "any JSON (max 3 MB)", description: "Data saved by a plugin (e.g. friends' timetables). Returned in /api/state under plugins." },
+    { method: "POST", path: "/api/email-search", body: "{ q }", description: "Finds an e-mail address in the ENT webmail's directory (one or two queries, ranked; may open the webmail login window). Returns { results: [{ name, email, type, score }] }." },
     { method: "POST", path: "/api/download", body: "{ name, type, content, encoding?: 'base64' }", description: "Turns generated content into a download link (GET /api/download/:id, valid 10 minutes); used where blob downloads don't work (Android)." },
     { method: "POST", path: "/mcp", description: "MCP endpoint (Streamable HTTP) for AI assistants: homework, timetable, grades, news, notebook, documents tools." },
   ],
@@ -538,6 +541,17 @@ const server = createServer(async (req, res) => {
     }
     // Email addresses of those teachers/staff, via the ENT webmail's autocomplete
     // (the user logs in to the webmail in a window). One lookup per person.
+    // One address, searched by the user (Mes données): the webmail's directory, ranked.
+    if (url.pathname === "/api/email-search" && req.method === "POST") {
+      const { q } = await readJson(req);
+      if (typeof q !== "string" || q.length > 100) return json(res, { error: "Recherche invalide" }, 400);
+      try {
+        return json(res, { results: await searchEmail(q) });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(res, { error: message }, /3 lettres/.test(message) ? 400 : /Trop de recherches/.test(message) ? 429 : 502);
+      }
+    }
     if (url.pathname === "/api/contacts/emails" && req.method === "POST") {
       let contacts = store.get<any[]>("contacts");
       // Called directly, not through HTTP: on Android a request to ourselves
@@ -596,8 +610,15 @@ const server = createServer(async (req, res) => {
       const value = await readJson(req);
       if (typeof value?.enabled !== "boolean" || !["stable", "dev"].includes(value?.channel)) return json(res, { error: "Invalid settings" }, 400);
       const changed = value.channel !== updateSettings(store).channel;
-      store.setSetting("updates", { enabled: value.enabled, channel: value.channel });
+      store.setSetting("updates", { enabled: value.enabled, channel: value.channel, auto: typeof value.auto === "boolean" ? value.auto : updateSettings(store).auto });
       if (changed || value.enabled) await checkForUpdates(store, { force: true });
+      return json(res, state());
+    }
+    if (url.pathname === "/api/update/install" && req.method === "POST") {
+      // Runs in the background (download can take a while); progress is in /api/state.update.install.
+      store.setSetting("updateFailed", null); // asked by the user: retry even after a failure
+      installUpdate(store, updateNotice).catch((err) => console.warn(`[update] ${err instanceof Error ? err.message : err}`));
+      await new Promise((r) => setTimeout(r, 200));
       return json(res, state());
     }
     if (url.pathname === "/api/documents.zip" && req.method === "GET") {
@@ -659,6 +680,11 @@ const server = createServer(async (req, res) => {
   }
 });
 
+/** Update news as a system notification (and in the UI's banner through /api/state). */
+function updateNotice(title: string, body: string) {
+  notify.showSystemNotification({ id: `update:${Date.now()}`, kind: "news", title, body, at: Date.now() });
+}
+
 // Localhost only: the data is personal.
 /**
  * Starts the HTTP server (and background sync). Used by `npm run serve`
@@ -676,9 +702,8 @@ export function startServer({ port = PORT, host = HOST } = {}): Promise<{ port: 
       console.log(`Pronote UI: http://localhost:${actual}`);
       if (pronoteURL) sync(); // nothing to sync before the first login
       const timer = setInterval(() => pronoteURL && sync(), SYNC_EVERY_MS);
-      const stopUpdates = scheduleUpdateChecks(store, (info) =>
-        notify.showSystemNotification({ id: `update:${info.latest}`, kind: "news", title: `repronote ${info.latest} est disponible`, body: "Ouvrez repronote pour le télécharger.", at: Date.now() }));
-      resolve({
+      const stopUpdates = scheduleUpdateChecks(store, updateNotice);
+      const handle = {
         port: actual,
         // Log out of Pronote so the next start isn't refused.
         async stop() {
@@ -687,7 +712,11 @@ export function startServer({ port = PORT, host = HOST } = {}): Promise<{ port: 
           await live.reset();
           server.close();
         },
-      });
+      };
+      // The standalone server updates itself; the desktop and Android apps set their own installer.
+      if (PLATFORM === "server" || PLATFORM === "server-installed") setUpdateInstaller(serverInstaller(handle.stop));
+      if (process.env.REPRONOTE_PID_FILE) void writeFile(process.env.REPRONOTE_PID_FILE, `${process.pid}\n`).catch(() => {});
+      resolve(handle);
     });
   });
 }

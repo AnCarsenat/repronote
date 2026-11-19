@@ -261,6 +261,13 @@ export async function checkUpdates() {
   return info;
 }
 
+/** Downloads and installs the newer version (in the background on the server); then repronote restarts. */
+export async function installUpdate() {
+  store.state = keepUnsaved(await call("/api/update/install", { method: "POST" }));
+  stateVersion++;
+  emit();
+}
+
 export async function saveUpdateSettings(settings) {
   store.state = keepUnsaved(await call("/api/update/settings", { method: "PUT", body: JSON.stringify(settings) }));
   stateVersion++;

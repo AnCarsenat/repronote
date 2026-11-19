@@ -78,6 +78,8 @@ Write throwaway test scripts in a scratch folder, not in the repo.
   They are pinned to a commit; updating them is the user's explicit action.
 - The ENT session cookies (`data/ent-session-cookies.json`) and the Chromium profile are secrets: mode 0600/0700, never logged, never exported.
 - The Android signing key (repository secrets) must never change or leak (see docs/releases.md).
+- Self-updates install only files whose SHA-256 matches the `digest` GitHub publishes, downloaded from GitHub hosts. Installers replace the program, never the data folder.
+- The e-mail search (`searchEmail` in `src/core/webmail.ts`) is one user-typed query at a time: at most 2 directory requests per search, spaced, capped per 10 minutes, nothing stored. Don't turn it into a bulk or automatic lookup.
 
 ## Traps (each one has bitten this project)
 
@@ -122,7 +124,7 @@ Write throwaway test scripts in a scratch folder, not in the repo.
 | A per-device setting | `web/settings.js` (`DEFAULTS`, `applySettings`), `web/index.html` (first paint), `web/views/settings.js` (UI) |
 | Notifications | `src/notify/notifications.ts`, `web/views/settings.js` (Notifications) |
 | Login problems | `src/core/browser-session.ts`, `*-driver.ts`, `session-cookies.ts`; `REPRONOTE_DEBUG=1` prints login steps |
-| Updates, versions | `src/core/updates.ts`, `src/core/version.ts`, `scripts/ci-version.mjs`, `web/updates.js` |
+| Updates, versions | `src/core/updates.ts` (check, download, digest), installers `src/core/server-update.ts`, `src/electron/update.ts`, `android/…/Updater.java`; `src/core/version.ts`, `scripts/ci-version.mjs`, `web/updates.js` |
 | CI, releases, pages | `.github/workflows/`, `docs/releases.md`, `site/index.html` |
 
 ## Writing style

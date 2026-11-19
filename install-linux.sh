@@ -20,6 +20,8 @@ REPO="AnCarsenat/repronote"
 PREFIX="${PREFIX:-/usr/local}"
 OPT_DIR="${OPT_DIR:-/opt}"
 APP_BIN="$PREFIX/bin/repronote"
+# The AppImage lives in its own folder, owned by you, so the app can update itself.
+APP_DIR="$OPT_DIR/repronote-app"
 SERVER_DIR="$OPT_DIR/repronote-server"
 SERVER_BIN="$PREFIX/bin/repronote-server"
 APPS="$PREFIX/share/applications"
@@ -70,7 +72,7 @@ if [[ "$mode" == "uninstall" ]]; then
     rm -f "$UNIT"
   fi
   "$SERVER_BIN" --stop 2>/dev/null || true
-  $SUDO rm -rf "$APP_BIN" "$SERVER_BIN" "$SERVER_DIR" "$APPS/repronote.desktop" "$APPS/repronote-server.desktop" "$ICON"
+  $SUDO rm -rf "$APP_BIN" "$APP_DIR" "$SERVER_BIN" "$SERVER_DIR" "$APPS/repronote.desktop" "$APPS/repronote-server.desktop" "$ICON"
   say "repronote a été désinstallé. Vos données restent dans ~/.config/repronote (application) et ~/.local/share/repronote (serveur)."
   exit 0
 fi
@@ -152,7 +154,13 @@ if [[ "$mode" == "app" ]]; then
   FILE="repronote.AppImage"
   say "Téléchargement de l'application repronote $VERSION…"
   download '\.AppImage$' "$FILE"
-  $SUDO install -Dm755 "$TMP/$FILE" "$APP_BIN"
+  $SUDO rm -f "$APP_BIN"
+  $SUDO install -d "$APP_DIR"
+  $SUDO install -m755 "$TMP/$FILE" "$APP_DIR/repronote.AppImage"
+  # Owned by you: automatic updates replace the AppImage without sudo.
+  $SUDO chown -R "$(id -u):$(id -g)" "$APP_DIR"
+  $SUDO install -d "$(dirname "$APP_BIN")"
+  $SUDO ln -sf "$APP_DIR/repronote.AppImage" "$APP_BIN"
   desktop_entry repronote.desktop "repronote" "Une interface alternative pour Pronote" "$APP_BIN %U"
   done_msg="repronote $VERSION est installé. Lancez-le depuis le menu des applications ou avec la commande « repronote »."
 else
@@ -169,6 +177,8 @@ else
   $SUDO rm -rf "$SERVER_DIR"
   $SUDO cp -r "$TMP/x/repronote-server" "$SERVER_DIR"
   $SUDO chmod -R a+rX "$SERVER_DIR"
+  # Owned by you: the server updates itself in place without sudo (data is elsewhere).
+  $SUDO chown -R "$(id -u):$(id -g)" "$SERVER_DIR"
 
   # Launcher: starts the server in the background if needed, then opens the browser.
   $SUDO install -d "$(dirname "$SERVER_BIN")"
@@ -184,6 +194,8 @@ export REPRONOTE_DATA_DIR="\${REPRONOTE_DATA_DIR:-\${XDG_DATA_HOME:-\$HOME/.loca
 export PORT="\${PORT:-4173}"
 $chromium_line
 STATE="\${XDG_STATE_HOME:-\$HOME/.local/state}/repronote"
+# The server writes its pid here (also after restarting itself on an update).
+export REPRONOTE_PID_FILE="\$STATE/server.pid"
 URL="http://localhost:\$PORT"
 mkdir -p "\$REPRONOTE_DATA_DIR" "\$STATE"
 running() { curl -fsS -o /dev/null "\$URL/api" 2>/dev/null; }
@@ -220,6 +232,8 @@ After=network-online.target
 [Service]
 ExecStart=$SERVER_BIN --foreground
 Restart=on-failure
+# Lets the server restart itself through systemd after an automatic update.
+Environment=REPRONOTE_SUPERVISED=systemd
 
 [Install]
 WantedBy=default.target

@@ -6,6 +6,35 @@ let contactsState = "idle"; // idle | loading | error
 let contactsQuery = "";
 let emailsState = "idle"; // idle | loading | error
 let emailsError = "";
+// "Trouver une adresse e-mail": one search at a time.
+const find = { q: "", state: "idle", error: "", results: null, searched: "" }; // state: idle | loading | error
+
+async function searchAddress(rerender) {
+  const q = find.q.trim();
+  if (!q || find.state === "loading") return;
+  find.state = "loading";
+  find.error = "";
+  rerender();
+  try {
+    const r = await fetch("/api/email-search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+    find.results = body.results;
+    find.searched = q;
+    find.state = "idle";
+  } catch (err) {
+    find.state = "error";
+    find.error = err.message;
+  }
+  rerender();
+}
+
+/** Prefills the search with a contact from Pronote ("M. DUPONT P." -> "Dupont P"). */
+function searchFor(name, rerender) {
+  find.q = name.replace(/\b(M|Mme|Mlle)\.?\s/g, "").replace(/\./g, "").trim();
+  document.getElementById("email-find")?.scrollIntoView({ block: "center" });
+  searchAddress(rerender);
+}
 
 export default {
   id: "donnees",
@@ -51,6 +80,27 @@ export default {
             h("div", { class: "copy-row" }, h("code", {}, a.iCalURL), copyBtn(a.iCalURL)),
           )
         : null,
+
+      h("section", { class: "card wide email-find" },
+        h("h2", {}, "Trouver une adresse e-mail"),
+        h("p", { class: "muted small" }, "Un professeur, un personnel… Tapez son nom (et son prénom ou son initiale si vous les connaissez). repronote cherche dans l'annuaire du webmail de l'ENT ; la première fois, connectez-vous au webmail dans la fenêtre qui s'ouvre."),
+        h("form", { class: "email-find-form", role: "search", onsubmit: (e) => {
+          e.preventDefault();
+          searchAddress(rerender);
+        } },
+          h("input", { type: "search", id: "email-find", class: "search", placeholder: "Ex. : Dupont, Marie Durand, Martin J.", value: find.q, autocomplete: "off",
+            "aria-label": "Nom à chercher", oninput: (e) => (find.q = e.target.value) }),
+          h("button", { type: "submit", class: "small-btn", disabled: find.state === "loading" }, find.state === "loading" ? "Recherche…" : "Chercher")),
+        find.state === "error" ? h("p", { class: "error-text small", role: "alert" }, find.error) : null,
+        find.results
+          ? find.results.length
+            ? h("ul", { class: "email-results", "aria-live": "polite" },
+                find.results.map((r, i) => h("li", { class: i === 0 && (find.results.length === 1 || r.score > find.results[1].score) ? "best" : "" },
+                  h("div", {}, h("strong", {}, r.name), r.type ? h("span", { class: "muted small" }, ` · ${r.type}`) : null),
+                  h("div", { class: "copy-row" }, h("a", { href: `mailto:${r.email}` }, r.email), copyBtn(r.email)))))
+            : h("p", { class: "muted small", "aria-live": "polite" }, `Personne trouvé pour « ${find.searched} ». Essayez le nom seul, ou une autre orthographe.`)
+          : null,
+      ),
 
       h("section", { class: "card wide" },
         h("div", { class: "row" },
@@ -109,7 +159,9 @@ export default {
                           ? h("a", { href: `mailto:${c.email}` }, c.email)
                           : c.emailCandidates?.length
                             ? [h("span", { class: "tag warn" }, "à vérifier"), c.emailCandidates.map((x) => h("div", { class: "muted" }, `${x.name} — `, h("a", { href: `mailto:${x.email}` }, x.email)))]
-                            : h("span", { class: "muted" }, "–"))))),
+                            : (c.type === "Professeur" || c.type === "Personnel")
+                              ? h("button", { type: "button", class: "link-btn small", onclick: () => searchFor(c.name, rerender) }, "Chercher")
+                              : h("span", { class: "muted" }, "–"))))),
               ),
             ]
           : h("button", {
