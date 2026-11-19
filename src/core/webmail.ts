@@ -164,8 +164,8 @@ export function queryWords(q: string): string[] {
  * How well a directory entry matches the words typed: whole word > word start >
  * inside a word; one-letter words are initials. 0 when a word matches nothing.
  */
-export function scoreEntry(entry: { displayName?: string; email?: string }, words: string[]): number {
-  const nameWords = norm(entry.displayName ?? "").split(/[\s'-]+/).filter(Boolean);
+export function scoreEntry(entry: { displayName?: string; email?: string; searchName?: string }, words: string[]): number {
+  const nameWords = norm(entry.searchName ?? entry.displayName ?? "").split(/[\s'-]+/).filter(Boolean);
   const local = norm((entry.email ?? "").split("@")[0]).split(/[._-]+/).filter(Boolean);
   let score = 0;
   for (const w of words) {
@@ -184,6 +184,28 @@ export function scoreEntry(entry: { displayName?: string; email?: string }, word
   return score;
 }
 
+/** The list in the directory's answer (an array, or an object holding one). */
+function directoryEntries(body: unknown): any[] {
+  if (Array.isArray(body)) return body;
+  if (body && typeof body === "object") {
+    for (const v of Object.values(body)) if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+/** Name and address of an entry, whatever the field names. */
+function toEntry(r: any): { displayName: string; email: string; type?: string } | null {
+  if (!r || typeof r !== "object") return null;
+  const first = r.firstName ?? r.firstname ?? r.givenName ?? "";
+  const last = r.lastName ?? r.lastname ?? r.familyName ?? r.surname ?? "";
+  const displayName = String(r.displayName ?? r.name ?? r.fullName ?? `${last} ${first}`).trim();
+  const mails = [r.email, r.mail, r.emailAddress, r.address, ...(Array.isArray(r.emails) ? r.emails.map((e: any) => e?.address ?? e?.value ?? e) : [])];
+  const email = mails.find((m) => typeof m === "string" && m.includes("@"));
+  // Keep first and last name in the searchable name even when displayName lacks one.
+  const name = [displayName, first, last].filter((x, i, all) => x && !all.slice(0, i).some((y) => y && String(y).toLowerCase().includes(String(x).toLowerCase()))).join(" ");
+  return email && name ? { displayName: displayName || name, email, type: r.type ?? r.profile ?? r.kind, ...(name !== displayName ? { searchName: name } : {}) } as any : null;
+}
+
 export function searchEmail(query: string): Promise<EmailSearchResult[]> {
   const run = async () => {
     const words = queryWords(query);
@@ -200,26 +222,34 @@ export function searchEmail(query: string): Promise<EmailSearchResult[]> {
       const wait = lastRequest + DELAY_MS - Date.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       lastRequest = Date.now();
-      return page.evaluate(async (q: string) => {
+      const body = await page.evaluate(async (q: string) => {
         const r = await fetch(`https://psn.monlycee.net/address-book/contacts?filter=${encodeURIComponent(q)}&_=${Date.now()}`, { credentials: "include" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return (await r.json()) as Array<{ displayName?: string; email?: string; type?: string }>;
+        return (await r.json()) as unknown;
       }, filter);
+      const list = directoryEntries(body);
+      // Counts and field names only (never names or addresses): enough to see what the directory sends.
+      console.log(`[email-search] request (${filter.length} letters): ${list.length} entries` +
+        `${Array.isArray(body) ? "" : ` in {${Object.keys((body as object) ?? {}).join(",")}}`}` +
+        `${list[0] ? `, fields ${Object.keys(list[0]).join(",")}` : ""}`);
+      return list.map(toEntry).filter((r): r is { displayName: string; email: string; type?: string } => Boolean(r));
     };
     try {
-      // The longest word is usually the last name; the directory matches on it.
-      let found = (await ask(long[0])).filter((r) => r.email && r.displayName);
-      let ranked = found.map((r) => ({ name: r.displayName!, email: r.email!, type: r.type, score: scoreEntry(r, words) })).filter((r) => r.score > 0);
-      // Nothing with every word: try the next word (a first name typed in full, a compound name).
-      if (!ranked.length && long[1]) {
-        found = (await ask(long[1])).filter((r) => r.email && r.displayName);
-        ranked = found.map((r) => ({ name: r.displayName!, email: r.email!, type: r.type, score: scoreEntry(r, words) })).filter((r) => r.score > 0);
+      // Every word may be the last name or the first name: ask the directory for
+      // the two longest (one request for a single word), merge, then keep and
+      // rank the people matching every word typed.
+      const byEmail = new Map<string, { displayName: string; email: string; type?: string }>();
+      // Sent as typed (accents kept: the directory may need them).
+      const typed = query.split(/[\s.@-]+/).filter(Boolean);
+      for (const w of long.slice(0, 2)) {
+        for (const r of await ask(typed.find((t) => norm(t) === w) ?? w)) byEmail.set(r.email.toLowerCase(), r);
       }
-      const seen = new Set<string>();
-      return ranked
-        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
-        .filter((r) => !seen.has(r.email.toLowerCase()) && seen.add(r.email.toLowerCase()))
-        .slice(0, 8);
+      const ranked = [...byEmail.values()]
+        .map((r) => ({ name: r.displayName, email: r.email, type: r.type, score: scoreEntry(r, words) }))
+        .filter((r) => r.score > 0)
+        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+      console.log(`[email-search] ${byEmail.size} people, ${ranked.length} matching every word`);
+      return ranked.slice(0, 15);
     } catch (err) {
       await closeWebmail(); // logged out, page gone…: start fresh next time
       throw err;

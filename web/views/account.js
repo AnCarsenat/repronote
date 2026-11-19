@@ -83,7 +83,7 @@ export default {
 
       h("section", { class: "card wide email-find" },
         h("h2", {}, "Trouver une adresse e-mail"),
-        h("p", { class: "muted small" }, "Un professeur, un personnel… Tapez son nom (et son prénom ou son initiale si vous les connaissez). repronote cherche dans l'annuaire du webmail de l'ENT ; la première fois, connectez-vous au webmail dans la fenêtre qui s'ouvre."),
+        h("p", { class: "muted small" }, "Un professeur, un personnel… Tapez son nom, son prénom, ou les deux (dans n'importe quel ordre). repronote cherche dans l'annuaire du webmail de l'ENT ; la première fois, connectez-vous au webmail dans la fenêtre qui s'ouvre."),
         h("form", { class: "email-find-form", role: "search", onsubmit: (e) => {
           e.preventDefault();
           searchAddress(rerender);
@@ -92,9 +92,10 @@ export default {
             "aria-label": "Nom à chercher", oninput: (e) => (find.q = e.target.value) }),
           h("button", { type: "submit", class: "small-btn", disabled: find.state === "loading" }, find.state === "loading" ? "Recherche…" : "Chercher")),
         find.state === "error" ? h("p", { class: "error-text small", role: "alert" }, find.error) : null,
+        find.results?.length > 1 ? h("p", { class: "muted small" }, `${find.results.length} personnes trouvées, la plus proche en premier.`) : null,
         find.results
           ? find.results.length
-            ? h("ul", { class: "email-results", "aria-live": "polite" },
+            ? h("ul", { class: "email-results", "aria-live": "polite", "aria-label": `${find.results.length} résultat(s)` },
                 find.results.map((r, i) => h("li", { class: i === 0 && (find.results.length === 1 || r.score > find.results[1].score) ? "best" : "" },
                   h("div", {}, h("strong", {}, r.name), r.type ? h("span", { class: "muted small" }, ` · ${r.type}`) : null),
                   h("div", { class: "copy-row" }, h("a", { href: `mailto:${r.email}` }, r.email), copyBtn(r.email)))))
