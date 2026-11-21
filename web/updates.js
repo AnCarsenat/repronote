@@ -1,6 +1,6 @@
 // Update notice (banner) and the "Mises à jour" settings block.
 import { h, formatAgo } from "./lib.js";
-import { store, checkUpdates, saveUpdateSettings } from "./state.js";
+import { store, checkUpdates, saveUpdateSettings, installUpdate, refresh } from "./state.js";
 
 const DISMISS = "repronote:update-dismissed";
 const dismissed = () => {
@@ -22,14 +22,64 @@ const HOW = {
   server: "Téléchargez le serveur (.zip) et remplacez l'ancien dossier, ou faites « git pull » si vous l'utilisez depuis les sources.",
 };
 
+// ---- Installing ----
+
+let installError = "";
+const busy = (u) => ["downloading", "installing", "waiting"].includes(u?.install?.state) && u.install.version === u.latest;
+
+/** What the install is doing, in words (null when nothing is going on). */
+function installText(u) {
+  const i = u?.install;
+  if (!i || i.version !== u.latest) return null;
+  if (i.state === "downloading") return `Téléchargement de ${i.version}… ${Math.round((i.progress ?? 0) * 100)} %`;
+  if (i.state === "installing") return `Installation de ${i.version}… repronote va redémarrer.`;
+  if (i.state === "waiting") return u.platform === "android" ? "Confirmez l'installation dans la fenêtre d'Android." : "Redémarrage sur la nouvelle version…";
+  if (i.state === "error") return `La mise à jour a échoué : ${i.message}`;
+  return null;
+}
+
+async function startInstall(rerender) {
+  installError = "";
+  try {
+    await installUpdate();
+  } catch {
+    installError = "Serveur local injoignable.";
+  }
+  rerender?.();
+}
+
+// While an update installs, refresh often; once the server runs the new
+// version, reload the page so the new interface is used too.
+const loadedVersion = () => store.state?.version?.current;
+let firstVersion = null;
+let polling = null;
+export function watchUpdate() {
+  const v = loadedVersion();
+  if (v && !firstVersion) firstVersion = v;
+  if (v && firstVersion && v !== firstVersion) location.reload();
+  if (busy(store.state?.update) && !polling) {
+    polling = setTimeout(async () => {
+      polling = null;
+      await refresh();
+    }, 1500);
+  }
+}
+
 /** The banner shown at the top when a newer version is out (until dismissed for that version). */
 export function updateBanner() {
   const u = store.state?.update;
-  if (!u?.newer || !u.latest || dismissed() === u.latest) return null;
+  watchUpdate();
+  if (!u?.newer || !u.latest) return null;
+  const doing = installText(u);
+  if (busy(u)) return [h("span", {}, doing)];
+  if (dismissed() === u.latest) return null;
+  const canInstall = !u.autoUnsupported && u.asset;
   return [
-    h("span", {}, `repronote ${u.latest} est disponible (vous avez ${u.current}).`),
+    h("span", {}, u.install?.state === "error" ? doing : `repronote ${u.latest} est disponible (vous avez ${u.current}).`),
     h("span", { class: "banner-actions" },
-      u.url ? h("a", { class: "button small-btn", href: u.url, target: "_blank", rel: "noreferrer" }, "Télécharger") : null,
+      canInstall
+        ? h("button", { type: "button", class: "small-btn", onclick: () => startInstall() }, "Installer")
+        : u.url ? h("a", { class: "button small-btn", href: u.url, target: "_blank", rel: "noreferrer" }, "Télécharger") : null,
       h("a", { class: "button secondary small-btn", href: "#/settings", onclick: () => (openAbout = true) }, "Détails"),
       h("button", { type: "button", class: "secondary small-btn", onclick: (e) => {
         try {
@@ -55,7 +105,7 @@ export function updateSettingsBlock(row, toggle, rerender) {
   const st = store.state;
   const v = st?.version;
   const u = st?.update;
-  const s = st?.updateSettings ?? { enabled: true, channel: "stable" };
+  const s = st?.updateSettings ?? { enabled: true, channel: "stable", auto: true };
   if (!v) return null;
   const set = async (change) => {
     message = "";
@@ -79,7 +129,13 @@ export function updateSettingsBlock(row, toggle, rerender) {
         [["stable", "Stable"], ["dev", "Dev"]].map(([value, label]) =>
           h("button", { type: "button", class: `seg ${s.channel === value ? "on" : ""}`, "aria-pressed": String(s.channel === value), onclick: () => set({ channel: value }) }, label)))),
     row("Vérifier automatiquement", "Demande à GitHub s'il existe une nouvelle version, au démarrage puis deux fois par jour. Rien n'est envoyé d'autre que la demande.",
-      toggle("set-update-auto", s.enabled, (on) => set({ enabled: on })), { id: "set-update-auto" }),
+      toggle("set-update-check", s.enabled, (on) => set({ enabled: on })), { id: "set-update-check" }),
+    row("Installer automatiquement",
+      u?.autoUnsupported
+        ? `Pas possible ici : ${u.autoUnsupported}`
+        : "Quand une version plus récente sort, repronote vous prévient, la télécharge, vérifie qu'elle vient bien de GitHub, l'installe et redémarre. Vos données sont conservées." +
+          (v.platform === "android" ? " Android demande une confirmation la première fois." : ""),
+      toggle("set-update-install", s.auto !== false && !u?.autoUnsupported, (on) => set({ auto: on }), { disabled: Boolean(u?.autoUnsupported) }), { id: "set-update-install" }),
     h("div", { class: "update-status" },
       h("p", { class: u?.newer ? "good-text" : u?.error ? "error-text" : "set-hint" }, status, u?.checkedAt ? h("span", { class: "set-hint" }, ` · vérifié ${formatAgo(u.checkedAt)}`) : null),
       h("button", { type: "button", class: "secondary small-btn", disabled: checking, onclick: async () => {
@@ -97,10 +153,16 @@ export function updateSettingsBlock(row, toggle, rerender) {
     message ? h("p", { class: "error-text small" }, message) : null,
     u?.newer
       ? h("div", { class: "update-how" },
-          h("p", {}, HOW[u.platform] ?? HOW.server),
-          u.command ? h("pre", { class: "update-cmd" }, u.command) : null,
+          installText(u) ? h("p", { class: u.install?.state === "error" ? "error-text" : "good-text", role: "status" }, installText(u)) : null,
+          installError ? h("p", { class: "error-text small" }, installError) : null,
+          !u.autoUnsupported && u.asset
+            ? h("div", { class: "sh-actions" },
+                h("button", { type: "button", class: "small-btn", disabled: busy(u), onclick: () => startInstall(rerender) },
+                  busy(u) ? "Installation…" : `Installer ${u.latest} maintenant`))
+            : h("p", {}, HOW[u.platform] ?? HOW.server),
+          u.autoUnsupported && u.command ? h("pre", { class: "update-cmd" }, u.command) : null,
           h("div", { class: "sh-actions" },
-            u.url ? h("a", { class: "button small-btn", href: u.url, target: "_blank", rel: "noreferrer" }, "Télécharger") : null,
+            u.url ? h("a", { class: "button secondary small-btn", href: u.url, target: "_blank", rel: "noreferrer" }, "Télécharger le fichier") : null,
             u.page ? h("a", { class: "button secondary small-btn", href: u.page, target: "_blank", rel: "noreferrer" }, "Notes de version ↗") : null),
           u.notes ? h("details", { class: "set-details" }, h("summary", {}, "Nouveautés"), u.notes) : null)
       : null,

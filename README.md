@@ -114,17 +114,22 @@ Il faut **Node.js ≥ 24** et **Chromium** (ou Chrome) pour la connexion à l'EN
 
 ## Mises à jour
 
-repronote demande à GitHub, au démarrage puis deux fois par jour, s'il existe une nouvelle version (rien d'autre n'est envoyé ; désactivable dans **Réglages → À propos → Mises à jour**). Si oui, un bandeau propose le bon fichier :
+repronote demande à GitHub, au démarrage puis deux fois par jour, s'il existe une nouvelle version (rien d'autre n'est envoyé). Réglages dans **Réglages → À propos → Mises à jour** :
 
-| Vous avez… | Pour mettre à jour |
+- **Vérifier automatiquement** : la vérification elle-même (désactivable).
+- **Installer automatiquement** (activé par défaut) : quand une version plus récente sort, repronote vous prévient (notification), la télécharge depuis GitHub, **vérifie son empreinte SHA-256** (publiée par GitHub pour chaque fichier ; un fichier modifié est refusé), l'installe et redémarre. Le bouton **Installer** du bandeau fait la même chose à la demande. **Vos données sont conservées** : seul le programme est remplacé.
+
+| Vous avez… | Comment ça s'installe |
 |---|---|
-| Android | Téléchargez l'APK et ouvrez-le : il s'installe par-dessus, vos données restent. **Depuis la 0.3.0 ou avant** : désinstallez d'abord l'ancienne application une fois (sinon « Application non installée » et l'ancienne version reste), puis reconnectez-vous. |
-| Windows | Lancez le nouvel installateur. |
-| Mac | Ouvrez le nouveau .dmg et glissez repronote dans Applications (remplacer). |
-| Linux (AppImage, .deb) | Téléchargez le nouveau fichier, ou relancez la commande d'installation. |
-| Serveur installé par le script | `repronote-server --update` |
+| Android | Android installe l'APK par-dessus (même signature). La première fois, autorisez repronote à installer des applications et confirmez ; ensuite (Android 12+), sans confirmation. **Depuis la 0.3.0 ou avant** : désinstallez d'abord l'ancienne application une fois, puis reconnectez-vous. |
+| Windows | L'installateur tourne en silencieux puis relance repronote. |
+| Mac | La nouvelle application remplace l'ancienne dans Applications, puis se rouvre. |
+| Linux AppImage | Le fichier est remplacé, puis relancé. Installée par le script : dans `/opt/repronote-app`, qui vous appartient. |
+| Linux .deb | Le système demande votre mot de passe (`pkexec`), puis repronote redémarre. |
+| Linux .tar.gz | Le dossier est remplacé (s'il est modifiable), puis relancé. |
+| Serveur (script ou zip) | Les fichiers du programme sont remplacés sur place (les données et `node_modules` restent), puis le serveur redémarre (par systemd avec `--autostart`). Installé avant la 0.5 dans `/opt` : relancez une fois `repronote-server --update` pour que le dossier vous appartienne. Depuis le code source : `git pull`. |
 
-Deux **canaux** : *stable* (les versions publiées, branche `main`) et *dev* (la version en cours, branche `dev`, reconstruite à chaque modification). On en change dans le même réglage. Le script Linux accepte `--dev`.
+Si l'installation automatique n'est pas possible (dossier non modifiable…), le réglage dit pourquoi et le bandeau propose le fichier ou la commande. Deux **canaux** : *stable* (les versions publiées, branche `main`) et *dev* (la version en cours, branche `dev`, reconstruite à chaque modification ; prend aussi une version stable plus récente). On en change dans le même réglage. Le script Linux accepte `--dev`.
 
 ## Notifications et webhooks
 
@@ -206,6 +211,8 @@ Le serveur local expose une API JSON. `GET /api` en donne la liste.
 | POST | `/api/news/read` | Marquer une information comme lue / non lue dans Pronote — `{ "key": "...", "read": true }` |
 | GET | `/api/contacts` | Annuaire : professeurs (matières) et personnels (fonction) joignables par la messagerie. `/api/contacts.csv` pour un tableur |
 | POST | `/api/contacts/emails` | Cherche l'adresse e-mail de chacun de ces professeurs/personnels avec l'autocomplétion du webmail de l'ENT (une fenêtre s'ouvre pour s'y connecter ; une recherche par personne, rien d'autre n'est lu) |
+| POST | `/api/email-search` | `{ q }` : cherche une adresse e-mail dans l'annuaire du webmail de l'ENT (une ou deux requêtes, résultats classés ; la première fois, la fenêtre du webmail peut s'ouvrir pour s'y connecter) |
+| POST | `/api/update/install` | Télécharge la nouvelle version (vérifiée avec l'empreinte SHA-256 publiée par GitHub), l'installe et redémarre ; les données sont conservées |
 | PUT | `/api/notifications` | Quoi notifier et où — `{ "kinds": { "grade": true, … }, "system": true, "webhooks": [{ "url", "format": "discord" \| "json", "name" }] }` |
 | POST | `/api/notifications/test` | Envoie une notification de test partout |
 | GET | `/api/export` | Toutes les données en un fichier JSON |

@@ -1164,3 +1164,11 @@ body, button, input, select, textarea { font-family: var(--font); }
 button.seg, a.seg { font: inherit; font-size: 0.88rem; border: 0; background: none; color: var(--muted); padding: 5px 12px; }
 button.seg.on, a.seg.on { background: var(--card); color: var(--text); }
 button.seg:focus-visible, a.seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Trouver une adresse e-mail (Mes données) */
+.email-find-form { display: flex; gap: 8px; margin: 10px 0; }
+.email-find-form .search { flex: 1; min-width: 0; margin: 0; }
+.email-results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.email-results li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.email-results li.best { border-color: var(--accent); background: var(--accent-soft, transparent); }
+.email-results a { overflow-wrap: anywhere; }

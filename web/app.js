@@ -16,7 +16,7 @@ import settings, { setViews } from "./views/settings.js";
 import welcome from "./views/welcome.js";
 import "./notifications.js";
 import { caretOffset, setCaret } from "./md-editor.js";
-import { updateBanner } from "./updates.js";
+import { updateBanner, watchUpdate } from "./updates.js";
 
 const views = [home, timetable, homework, grades, stats, plugins, resources, notebook, news, documents, account, settings];
 setViews(() => views);
@@ -155,6 +155,7 @@ function renderBanner() {
       ];
     }
   }
+  watchUpdate(); // reloads the page once the server runs a new version
   // Nothing wrong: tell about a new version, if any.
   if (!kind) {
     const update = updateBanner();

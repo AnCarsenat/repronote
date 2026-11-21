@@ -22,6 +22,11 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
+// Updates install themselves (src/electron/update.ts); data stays in userData.
+const { setUpdateInstaller } = await import("../core/updates.ts");
+const { desktopInstaller } = await import("./update.ts");
+setUpdateInstaller(desktopInstaller);
+
 const { setBrowserDriver } = await import("../core/browser-driver.ts");
 const { electronDriver } = await import("./electron-driver.ts");
 setBrowserDriver(electronDriver);

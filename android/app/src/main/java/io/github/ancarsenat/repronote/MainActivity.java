@@ -94,6 +94,10 @@ public class MainActivity extends Activity {
                 Notifications.show(appContext, command.optString("title"), command.optString("body"));
                 return;
             }
+            if (command.optString("cmd").equals("installApk")) {
+                Updater.install(appContext, command.optString("path"));
+                return;
+            }
             MainActivity a = current;
             if (a != null) a.onCommand(command);
             else bridge.emit("closed", command.optInt("id"));
