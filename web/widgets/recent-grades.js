@@ -1,4 +1,4 @@
-import { h, subjectName, gradeText, on20, isNumber, fmtNum, emptyState, relativeDay } from "../lib.js";
+import { h, subjectName, gradeText, diffWithAverage, isNumber, fmtNum, emptyState, relativeDay } from "../lib.js";
 
 export default {
   type: "recent-grades",
@@ -16,22 +16,31 @@ export default {
     // The same grade can appear in several periods (semester + year): dedupe by id.
     const unique = [...new Map(all.map((g) => [g.id, g])).values()];
     const latest = unique.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, settings.count);
-    if (!latest.length) return emptyState("Aucune note pour l'instant.");
+    
+    // if there are not grades return an empty state
+    if (latest.length === 0) return emptyState("Aucune note pour l'instant.");
 
     return [
       h("ul", { class: "list" },
         latest.map((g) => {
-          const mine = on20(g);
-          const avg = isNumber(g.average) && isNumber(g.outOf) ? (g.average.points / g.outOf.points) * 20 : null;
-          const diff = settings.showDelta && mine !== null && avg !== null ? mine - avg : null;
+          // get diff
+          const diff = settings.showDelta ? diffWithAverage(g) : null;
+          
+          // render the grades
           return h("li", { class: "row" },
+            // subject and date
             h("div", {},
               h("div", { class: "subject" }, subjectName(g.subject?.name)),
               h("div", { class: "muted small" }, [relativeDay(new Date(g.date)), g.comment].filter(Boolean).join(" · ")),
             ),
+            // grade
             h("div", { class: "grade" },
               h("span", { class: "grade-value" }, gradeText(g.value), h("span", { class: "muted" }, `/${gradeText(g.outOf)}`)),
-              diff !== null ? h("span", { class: `delta ${diff >= 0 ? "up" : "down"}` }, `${diff >= 0 ? "+" : ""}${fmtNum(diff, 1)} vs classe`) : null,
+              diff !== null ? 
+                h("span", { 
+                  class: `delta ${diff >= 0 ? "up" : "down"}` }, 
+                  `${diff >= 0 ? "+" : ""}${fmtNum(diff, 1)} vs classe`) // show diff
+              : null,
             ),
           );
         }),
