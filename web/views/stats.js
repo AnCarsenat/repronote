@@ -28,7 +28,10 @@ const tile = (label, value, sub, tone) =>
 export default {
   id: "stats",
   title: "Statistiques",
-
+  
+  /**
+   * TODO: refactore this because it's unreadable
+  */
   render(data, rerender) {
     const settings = store.state?.subjectSettings ?? {};
     const grades = data.grades;
