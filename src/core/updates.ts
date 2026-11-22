@@ -109,6 +109,18 @@ function assetFor(assets: any[]): UpdateAsset | undefined {
 const versionOf = (release: any): string =>
   /\d+\.\d+\.\d+(?:-dev\.\d+)?/.exec(`${release.name ?? ""} ${release.tag_name}`)?.[0] ?? release.tag_name;
 
+/**
+ * The Linux install command for this copy, shown when it can't update itself:
+ * the server, and an AppImage the old script put in a system folder (issue #14:
+ * a download page isn't practical). The script installs into a folder owned by
+ * the user, so the following updates are automatic.
+ */
+function installCommand(dev: boolean): string | undefined {
+  const kind = PLATFORM === "server-installed" ? "--server" : PLATFORM === "desktop-appimage" ? "--app" : null;
+  if (!kind) return undefined;
+  return `curl -fsSL https://github.com/${REPO}/releases/${dev ? "download/dev" : "latest/download"}/install-linux.sh | bash -s -- ${kind}${dev ? " --dev" : ""}`;
+}
+
 let last: UpdateInfo | null = null;
 let notified = "";
 let installing: Promise<void> | null = null;
@@ -157,9 +169,7 @@ export async function checkForUpdates(store: Store, { force = false } = {}): Pro
         page: release.html_url,
         notes: String(release.body ?? "").slice(0, 3000),
         publishedAt: release.published_at,
-        command: PLATFORM === "server-installed"
-          ? `curl -fsSL https://github.com/${REPO}/releases/${release.prerelease ? "download/dev" : "latest/download"}/install-linux.sh | bash -s -- --server${release.prerelease ? " --dev" : ""}`
-          : undefined,
+        command: installCommand(release.prerelease),
       });
     }
   } catch (err) {

@@ -15,7 +15,7 @@ const HOW = {
   android: "Téléchargez l'APK puis ouvrez-le : il s'installe par-dessus l'ancienne version, vos données restent.",
   "desktop-windows": "Téléchargez l'installateur et lancez-le : il remplace l'ancienne version, vos données restent.",
   "desktop-mac": "Téléchargez le .dmg, ouvrez-le et glissez repronote dans Applications pour remplacer l'ancienne version : vos données restent.",
-  "desktop-appimage": "Téléchargez la nouvelle AppImage et remplacez l'ancienne (ou relancez la commande d'installation Linux).",
+  "desktop-appimage": "Lancez cette commande dans un terminal : elle installe la nouvelle version dans un dossier à vous, et les mises à jour suivantes se feront toutes seules.",
   "desktop-deb": "Téléchargez le paquet .deb et installez-le par-dessus l'ancien.",
   "desktop-linux": "Téléchargez l'archive et remplacez l'ancien dossier.",
   "server-installed": "Lancez cette commande dans un terminal (ou « repronote-server --update ») :",
@@ -79,6 +79,8 @@ export function updateBanner() {
     h("span", { class: "banner-actions" },
       canInstall
         ? h("button", { type: "button", class: "small-btn", onclick: () => startInstall() }, "Installer")
+        // A command to run (Linux): shown with a copy button in Réglages → À propos.
+        : u.command ? h("a", { class: "button small-btn", href: "#/settings", onclick: () => (openAbout = true) }, "Mettre à jour")
         : u.url ? h("a", { class: "button small-btn", href: u.url, target: "_blank", rel: "noreferrer" }, "Télécharger") : null,
       h("a", { class: "button secondary small-btn", href: "#/settings", onclick: () => (openAbout = true) }, "Détails"),
       h("button", { type: "button", class: "secondary small-btn", onclick: (e) => {
@@ -160,7 +162,17 @@ export function updateSettingsBlock(row, toggle, rerender) {
                 h("button", { type: "button", class: "small-btn", disabled: busy(u), onclick: () => startInstall(rerender) },
                   busy(u) ? "Installation…" : `Installer ${u.latest} maintenant`))
             : h("p", {}, HOW[u.platform] ?? HOW.server),
-          u.autoUnsupported && u.command ? h("pre", { class: "update-cmd" }, u.command) : null,
+          u.autoUnsupported && u.command
+            ? h("div", { class: "copy-row" }, h("pre", { class: "update-cmd" }, u.command),
+                h("button", { type: "button", class: "secondary small-btn", onclick: async (e) => {
+                  try {
+                    await navigator.clipboard.writeText(u.command);
+                    e.target.textContent = "Copié ✓";
+                  } catch {
+                    e.target.textContent = "Copie impossible";
+                  }
+                } }, "Copier"))
+            : null,
           h("div", { class: "sh-actions" },
             u.url ? h("a", { class: "button secondary small-btn", href: u.url, target: "_blank", rel: "noreferrer" }, "Télécharger le fichier") : null,
             u.page ? h("a", { class: "button secondary small-btn", href: u.page, target: "_blank", rel: "noreferrer" }, "Notes de version ↗") : null),

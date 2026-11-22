@@ -52,7 +52,9 @@ export const desktopInstaller: UpdateInstaller = {
       }
       case "desktop-appimage": {
         const file = process.env.APPIMAGE;
-        return file && writable(dirname(file)) && writable(file) ? null : "Le fichier AppImage n'est pas modifiable : remplacez-le à la main.";
+        return file && writable(dirname(file)) && writable(file)
+          ? null
+          : "l'application est installée dans un dossier système. Lancez une fois la commande ci-dessous dans un terminal : les mises à jour suivantes se feront toutes seules.";
       }
       case "desktop-deb":
         return has("pkexec") ? null : "Installez le nouveau paquet .deb à la main (pkexec absent).";
