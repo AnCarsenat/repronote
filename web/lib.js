@@ -118,39 +118,28 @@ export const gradeText = (v) => (!v ? "–" : isNumber(v) ? fmtNum(v.points) : G
 export const fmtNum = (n, digits = 2) =>
   Number.isFinite(n) ? n.toLocaleString("fr-FR", { maximumFractionDigits: digits }) : "–";
 
-/** Grade on 20, or null when it doesn't count (absent, exempted...). Zeros for "Abs. 0"/"N.Rendu 0". */
-export function on20(g) {
-  // absent or not given back. 0 / 20
-  if (g.value?.kind === 6 || g.value?.kind === 7) return 0;
-  if (!isNumber(g.value) || !isNumber(g.outOf) || g.outOf.points <= 0) return null;
-  
-  // normalize on 20
-  return (g.value.points / g.outOf.points) * 20;
-}
-
-/** Grades on 0.0..1.0 or null when it does not count. Zeros for "Abs. 0" or "N.Rendu 0" */
+/** Grade as a fraction of its scale (0..1), or null when it doesn't count (absent, exempted...). Zeros for "Abs. 0"/"N.Rendu 0". */
 export function on0to1(g) {
-  // "Abs. 0" or "N.Rendu 0"
   if (g.value?.kind === 6 || g.value?.kind === 7) return 0;
   if (!isNumber(g.value) || !isNumber(g.outOf) || g.outOf.points <= 0) return null;
-  
-  // in [0, 1]
   return g.value.points / g.outOf.points;
 }
 
-/** get the average grade of g in 0.0..1.0, or null if invalid */ 
-export function averageGrade0To1(g) {
-  return isNumber(g.average) && isNumber(g.outOf) ? g.average.points / g.outOf.points : null;
+/** Grade on 20, or null when it doesn't count. */
+export function on20(g) {
+  const n = on0to1(g);
+  return n === null ? null : n * 20;
 }
 
-/** compute diff with average null if invalid, in 0.0..g.outOf.points */
+/** Class average as a fraction of the grade's scale (0..1), or null. */
+export function averageGrade0To1(g) {
+  return isNumber(g.average) && isNumber(g.outOf) && g.outOf.points > 0 ? g.average.points / g.outOf.points : null;
+}
+
+/** Gap with the class average on the grade's own scale (+2 for 8/10 vs 6/10), or null. */
 export function diffWithAverage(g) {
-  // compute grade and average in 0.0..1.0
   const mine = on0to1(g);
   const avg = averageGrade0To1(g);
-  
-  // if outOf is not valid, then mine and avg ain't valid so
-  // it's fine to not check here
   if (mine === null || avg === null) return null;
   return (mine - avg) * g.outOf.points;
 }
