@@ -2,22 +2,33 @@
 
 /** Creates an element: h("li", { class: "done", onclick }, "text", child, ...) */
 export function h(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
+  const element = document.createElement(tag);
+
+  // edit the element
   for (const [key, value] of Object.entries(attrs ?? {})) {
-    if (value === false || value == null) continue;
-    if (key === "class") el.className = value;
+    if (value === false || value == null) continue; // invalid value (false or null)
+    
+    // set class
+    if (key === "class") element.className = value;
+    // set styles
     else if (key === "style" && typeof value === "object") {
-      for (const [prop, v] of Object.entries(value)) el.style.setProperty(prop, v);
+      for (const [prop, v] of Object.entries(value)) 
+        element.style.setProperty(prop, v);
     }
-    else if (key.startsWith("on") && typeof value === "function") el.addEventListener(key.slice(2), value);
-    else if (key in el && typeof value !== "string") el[key] = value;
-    else el.setAttribute(key, value === true ? "" : value);
+    // callbacks
+    else if (key.startsWith("on") && typeof value === "function") element.addEventListener(key.slice(2), value);
+    // set key index
+    else if (key in element && typeof value !== "string") element[key] = value;
+    // otherwise set attribute 
+    else element.setAttribute(key, value === true ? "" : value);
   }
+
+  // append all the children
   for (const child of children.flat(Infinity)) {
     if (child == null || child === false) continue;
-    el.append(child instanceof Node ? child : String(child));
+    element.append(child instanceof Node ? child : String(child));
   }
-  return el;
+  return element;
 }
 
 /** Pronote descriptions are HTML: keep only the text, with line breaks. */
@@ -218,6 +229,21 @@ export function card(title, body, extra) {
   return h("section", { class: "card" }, title ? h("h2", {}, title, extra ?? null) : null, body);
 }
 
+/** creates a div element */
+export function div(attrs = {}, ...children) {
+  return h("div", attrs, ...children);
+}
+
+/** creates an li element */
+export function li(attrs = {}, ...children) {
+  return h("li", attrs, ...children);
+}
+
+/** creates a span element */
+export function span(attrs = {}, ...children) {
+  return h("span", attrs, ...children);
+}
+
 // ---- Rich text from Pronote (news, lesson contents) ----
 const SAFE_TAGS = new Set(["P", "BR", "DIV", "STRONG", "B", "EM", "I", "U", "UL", "OL", "LI", "A", "H1", "H2", "H3", "H4", "BLOCKQUOTE", "HR"]);
 
@@ -238,17 +264,17 @@ export function safeHTML(html) {
           if (["TR", "TABLE"].includes(child.tagName)) out.append(document.createElement("br"));
           continue;
         }
-        const el = document.createElement(child.tagName);
+        const element = document.createElement(child.tagName);
         if (child.tagName === "A") {
           const href = child.getAttribute("href") ?? "";
           if (/^https?:\/\//i.test(href)) {
-            el.href = href;
-            el.target = "_blank";
-            el.rel = "noreferrer noopener";
+            element.href = href;
+            element.target = "_blank";
+            element.rel = "noreferrer noopener";
           }
         }
-        el.append(clean(child));
-        out.append(el);
+        element.append(clean(child));
+        out.append(element);
       }
     }
     return out;
@@ -262,6 +288,13 @@ export function safeHTML(html) {
 /** Stable identity of a homework (Pronote ids change every session). Same as the server's. */
 export function homeworkKey(a) {
   const d = new Date(a.deadline);
-  const text = String(a.description ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+
+  // better style...
+  const text = String(a.description ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
   return `${a.subject?.name ?? "?"}|${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}|${text}`;
 }

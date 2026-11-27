@@ -1,4 +1,8 @@
-import { h, subjectName, gradeText, diffWithAverage, fmtNum, emptyState, relativeDay } from "../lib.js";
+import { h, div, li, span, subjectName, gradeText, diffWithAverage, fmtNum, emptyState, relativeDay } from "../lib.js";
+
+function deltaClass(diff) {
+  return `delta ${diff >= 0 ? "up" : "down"}`;
+}
 
 export default {
   type: "recent-grades",
@@ -23,14 +27,17 @@ export default {
         latest.map((g) => {
           // Gap with the class on the grade's own scale (out of 10 for a mark out of 10).
           const diff = settings.showDelta ? diffWithAverage(g) : null;
-          return h("li", { class: "row" },
-            h("div", {},
-              h("div", { class: "subject" }, subjectName(g.subject?.name)),
-              h("div", { class: "muted small" }, [relativeDay(new Date(g.date)), g.comment].filter(Boolean).join(" · ")),
+          return li({ class: "row" },
+            div({},
+              div({ class: "subject" }, subjectName(g.subject?.name)),
+              div({ class: "muted small" }, [relativeDay(new Date(g.date)), g.comment].filter(Boolean).join(" · ")),
             ),
-            h("div", { class: "grade" },
-              h("span", { class: "grade-value" }, gradeText(g.value), h("span", { class: "muted" }, `/${gradeText(g.outOf)}`)),
-              diff !== null ? h("span", { class: `delta ${diff >= 0 ? "up" : "down"}` }, `${diff >= 0 ? "+" : ""}${fmtNum(diff, 1)} vs classe`) : null,
+            div({ class: "grade" },
+              span( { class: "grade-value" }, gradeText(g.value), 
+              span( { class: "muted" }, `/${gradeText(g.outOf)}`)),
+              diff !== null 
+                ? span({ class: deltaClass(diff) }, `${diff >= 0 ? "+" : ""}${fmtNum(diff, 1)} vs classe`) 
+                : null,
             ),
           );
         }),

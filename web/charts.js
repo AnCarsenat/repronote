@@ -2,7 +2,7 @@
 // (the part that matters), "Fait" on top. Colors are validated categorical
 // slots (--series-1 / --series-2, see style.css); a legend, hover tooltips and
 // a data table carry the identity too, never color alone.
-import { h, startOfDay, addDays, subjectName, looksLikeTest } from "./lib.js";
+import { h, div, span, li, startOfDay, addDays, subjectName, looksLikeTest } from "./lib.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 const s = (tag, attrs = {}, ...children) => {
@@ -40,7 +40,7 @@ export function workloadChart(list, { days = 14 } = {}) {
   const yMax = Math.max(3, maxTotal);
   const step = yMax > 6 ? 2 : 1;
 
-  const tooltip = h("div", { class: "chart-tip", hidden: true });
+  const tooltip = div({ class: "chart-tip", hidden: true });
 
   // Drawn at the real pixel width (redrawn on resize) so text keeps its size.
   const draw = (W) => {
@@ -92,12 +92,12 @@ export function workloadChart(list, { days = 14 } = {}) {
       const tests = [...b.todo, ...b.done].filter(looksLikeTest).length;
       tooltip.replaceChildren(
         h("strong", {}, b.date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })),
-        h("div", { class: "tip-row" }, h("span", { class: "swatch todo" }), `À faire : ${nTodo}`),
-        h("div", { class: "tip-row" }, h("span", { class: "swatch done" }), `Fait : ${nDone}`),
-        tests ? h("div", { class: "muted" }, `dont ${tests} évaluation${tests > 1 ? "s" : ""}`) : null,
+        div({ class: "tip-row" }, h("span", { class: "swatch todo" }), `À faire : ${nTodo}`),
+        div({ class: "tip-row" }, h("span", { class: "swatch done" }), `Fait : ${nDone}`),
+        tests ? div({ class: "muted" }, `dont ${tests} évaluation${tests > 1 ? "s" : ""}`) : "",
         nTodo + nDone
-          ? h("ul", {}, [...b.todo, ...b.done].map((a) => h("li", { class: a.done ? "muted" : "" }, subjectName(a.subject?.name))))
-          : null,
+          ? h("ul", {}, [...b.todo, ...b.done].map((a) => li({ class: a.done ? "muted" : "" }, subjectName(a.subject?.name))))
+          : "",
       );
       tooltip.hidden = false;
       tooltip.style.left = `${(cx / W) * 100}%`;
@@ -134,15 +134,15 @@ export function workloadChart(list, { days = 14 } = {}) {
   const totalTodo = buckets.reduce((n, b) => n + b.todo.length, 0);
   const busiest = buckets.reduce((a, b) => (b.todo.length > a.todo.length ? b : a));
 
-  return h("div", { class: "chart-wrap" },
-    h("div", { class: "chart-head" },
-      h("div", { class: "legend" },
-        h("span", {}, h("span", { class: "swatch todo" }), "À faire"),
-        h("span", {}, h("span", { class: "swatch done" }), "Fait"),
+  return div({ class: "chart-wrap" },
+    div({ class: "chart-head" },
+      div({ class: "legend" },
+        span({}, span({ class: "swatch todo" }), "À faire"),
+        span({}, span({ class: "swatch done" }), "Fait"),
       ),
       totalTodo
-        ? h("span", { class: "muted small" }, `${totalTodo} à faire · jour le plus chargé : ${busiest.date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })}`)
-        : h("span", { class: "muted small" }, "Tout est fait sur la période"),
+        ? span({ class: "muted small" }, `${totalTodo} à faire · jour le plus chargé : ${busiest.date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })}`)
+        : span({ class: "muted small" }, "Tout est fait sur la période"),
     ),
     area,
     h("details", { class: "chart-table" },
@@ -176,7 +176,7 @@ function responsive(draw, tooltip) {
 }
 
 const legendOf = (series) =>
-  h("div", { class: "legend" }, series.map((s, i) => h("span", {}, h("span", { class: `swatch s${i + 1}` }), s.name)));
+  div({ class: "legend" }, series.map((s, i) => h("span", {}, h("span", { class: `swatch s${i + 1}` }), s.name)));
 
 const dataTable = (head, rows) =>
   h("details", { class: "chart-table" }, h("summary", {}, "Voir les données"),
@@ -191,7 +191,7 @@ const fr = (n, d = 2) => (Number.isFinite(n) ? n.toLocaleString("fr-FR", { maxim
 export function lineChart(series, { yMax = 20, height = 220, label = "" } = {}) {
   const xs = [...new Set(series.flatMap((s) => s.points.map((p) => +p.x)))].sort((a, b) => a - b);
   if (xs.length < 2) return h("p", { class: "empty" }, "Pas assez de notes pour tracer une évolution.");
-  const tooltip = h("div", { class: "chart-tip", hidden: true });
+  const tooltip = div( { class: "chart-tip", hidden: true });
   const draw = (W) => {
     const m = { l: 28, r: 10, t: 10, b: 24 };
     const pw = W - m.l - m.r;
@@ -230,9 +230,9 @@ export function lineChart(series, { yMax = 20, height = 220, label = "" } = {}) 
       cross.setAttribute("visibility", "visible");
       tooltip.replaceChildren(
         h("strong", {}, new Date(nearest).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })),
-        series.map((se, i) => {
+        ...series.map((se, i) => {
           const p = [...se.points].reverse().find((q) => +q.x <= nearest);
-          return h("div", { class: "tip-row" }, h("span", { class: `swatch s${i + 1}` }), `${se.name} : ${p ? fr(p.y) : "–"}`);
+          return h("div", { class: "tip-row" }, span({ class: `swatch s${i + 1}` }), `${se.name} : ${p ? fr(p.y) : "–"}`);
         }),
       );
       tooltip.hidden = false;
@@ -263,7 +263,7 @@ export function hBarChart(rows, { series = [{ name: "" }], max, format = (v) => 
   if (!rows.length) return h("p", { class: "empty" }, "Pas de données.");
   const top = max ?? Math.max(...rows.flatMap((r) => r.values.filter(Number.isFinite)));
   const two = series.length > 1;
-  const tooltip = h("div", { class: "chart-tip", hidden: true });
+  const tooltip = div({ class: "chart-tip", hidden: true });
   const draw = (W) => {
     const labelW = Math.min(170, W * 0.38);
     const m = { l: labelW + 8, r: 44, t: 4 };
@@ -307,7 +307,7 @@ export function hBarChart(rows, { series = [{ name: "" }], max, format = (v) => 
 /** Vertical bars over a sequence (e.g. weeks), one series; `highlight` marks one bar label. */
 export function vBarChart(bars, { label = "", highlight = null, format = (v) => String(v) } = {}) {
   if (!bars.length) return h("p", { class: "empty" }, "Pas de données.");
-  const tooltip = h("div", { class: "chart-tip", hidden: true });
+  const tooltip = div({ class: "chart-tip", hidden: true });
   const draw = (W) => {
     const H = 190;
     const m = { l: 24, r: 6, t: 8, b: 24 };
@@ -340,5 +340,5 @@ export function vBarChart(bars, { label = "", highlight = null, format = (v) => 
     });
     return s("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "chart", role: "img", "aria-label": label }, els);
   };
-  return h("div", { class: "chart-wrap" }, responsive(draw, tooltip), dataTable(["", "Valeur"], bars.map((b) => [b.title ?? b.label, format(b.value)])));
+  return div({ class: "chart-wrap" }, responsive(draw, tooltip), dataTable(["", "Valeur"], bars.map((b) => [b.title ?? b.label, format(b.value)])));
 }
